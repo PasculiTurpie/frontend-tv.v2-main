@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "deploy": "npm run build && scp -r ./build/* jsepulveda@172.19.14.135:/var/www/tv-operaciones",
+    "deploy": "npm run build && scp -r ./dist/. jsepulveda@172.19.14.135:/var/www/tv-operaciones",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
