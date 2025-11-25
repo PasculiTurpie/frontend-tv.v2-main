@@ -44,12 +44,12 @@ const Sidebar = () => {
         <li>
           <Link to="/satelite">Satélite</Link>
         </li>
-        <li>
+        {/* <li>
           <Link to="/str">STR</Link>
         </li>
         <li>
           <Link to="/str">Fibra</Link>
-        </li>
+        </li> */}
         <hr />
         <p className="nodo">
           Equipos

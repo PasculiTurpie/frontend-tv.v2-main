@@ -45,7 +45,7 @@ const ModalEquipment = ({
         nombre: dataEquipos.nombre || "",
         marca: dataEquipos.marca || "",
         modelo: dataEquipos.modelo || "",
-        tipoNombre: dataEquipos.tipoNombre.tipoNombre.toUpperCase() || "",
+        tipoNombre: dataEquipos?.tipoNombre?.tipoNombre?.toUpperCase() || "",
         ip_gestion: dataEquipos.ip_gestion || "",
       }}
       validationSchema={UpdateSchemaEquipo}
@@ -109,7 +109,7 @@ const ModalEquipment = ({
                     <br />
                     <Field as="select" className="form__group-input" name="tipoNombre">
                       <option value="">Seleccione tipo</option>
-                      {tiposEquipo.map((tipo) => (
+                      {tiposEquipo?.map((tipo) => (
                         <option key={tipo._id} value={tipo._id}>
                           {tipo.tipoNombre.toUpperCase()}
                         </option>

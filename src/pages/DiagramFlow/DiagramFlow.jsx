@@ -47,6 +47,7 @@ const EQUIPO_TYPE_IMAGE_MAP = {
   titan: "https://i.ibb.co/wrJZLrqR/titan.jpg",
   satelite: "https://i.ibb.co/23VpLD2N/satelite.jpg",
   rtes: "https://i.ibb.co/VcfxF9hz/rtes.jpg",
+  dcm:"https://i.ibb.co/VcfxF9hz/rtes.jpg"
 };
 
 const nodeTypes = { imageNode: CustomNode };

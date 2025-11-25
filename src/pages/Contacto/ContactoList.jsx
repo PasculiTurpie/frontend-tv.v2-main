@@ -12,14 +12,16 @@ const ContactoList = () => {
     const [modalOpen, setModalOpen] = useState(false);
     const [itemId, setItemId] = useState("");
 
+    // 🔍 BUSCADOR
+    const [searchTerm, setSearchTerm] = useState("");
+
     // Paginación (cliente)
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
 
     const refreshList = useCallback(() => {
         setIsLoading(true);
-        api
-            .getContact()
+        api.getContact()
             .then((res) => {
                 const list = res.data || [];
                 const sorted = list.sort((a, b) =>
@@ -65,7 +67,10 @@ const ContactoList = () => {
                 // Ajuste de página si quedó vacía
                 setTimeout(() => {
                     const newTotal = Math.max(contacts.length - 1, 0);
-                    const newTotalPages = Math.max(Math.ceil(newTotal / pageSize) || 1, 1);
+                    const newTotalPages = Math.max(
+                        Math.ceil(newTotal / pageSize) || 1,
+                        1
+                    );
                     if (page > newTotalPages) setPage(newTotalPages);
                 }, 0);
 
@@ -104,8 +109,25 @@ const ContactoList = () => {
 
     const handleCancel = () => setModalOpen(false);
 
-    // --- Paginación calculada ---
-    const total = contacts.length;
+    // 🔍 BUSCADOR: contactos filtrados por nombre, email o teléfono
+    const filteredContacts = useMemo(() => {
+        if (!searchTerm.trim()) return contacts;
+
+        const term = searchTerm.toLowerCase();
+        return contacts.filter((c) => {
+            const nombre = (c.nombreContact || "").toLowerCase();
+            const email = (c.email || "").toLowerCase();
+            const telefono = (c.telefono || "").toLowerCase();
+            return (
+                nombre.includes(term) ||
+                email.includes(term) ||
+                telefono.includes(term)
+            );
+        });
+    }, [contacts, searchTerm]);
+
+    // --- Paginación calculada (sobre la lista filtrada) ---
+    const total = filteredContacts.length;
     const totalPages = Math.max(Math.ceil(total / pageSize) || 1, 1);
 
     useEffect(() => {
@@ -114,8 +136,8 @@ const ContactoList = () => {
 
     const pageItems = useMemo(() => {
         const start = (page - 1) * pageSize;
-        return contacts.slice(start, start + pageSize);
-    }, [contacts, page, pageSize]);
+        return filteredContacts.slice(start, start + pageSize);
+    }, [filteredContacts, page, pageSize]);
 
     const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
     const rangeEnd = Math.min(page * pageSize, total);
@@ -132,7 +154,9 @@ const ContactoList = () => {
             nodes.push(
                 <button
                     key={n}
-                    className={`button btn-secondary ${n === page ? "active" : ""}`}
+                    className={`button btn-secondary ${
+                        n === page ? "active" : ""
+                    }`}
                     onClick={() => goTo(n)}
                     disabled={n === page}
                     style={{ minWidth: 40 }}
@@ -151,7 +175,8 @@ const ContactoList = () => {
             add(1);
             if (start > 2) nodes.push(<span key="l-ellipsis">…</span>);
             for (let i = start; i <= end; i++) add(i);
-            if (end < totalPages - 1) nodes.push(<span key="r-ellipsis">…</span>);
+            if (end < totalPages - 1)
+                nodes.push(<span key="r-ellipsis">…</span>);
             add(totalPages);
         }
 
@@ -166,7 +191,10 @@ const ContactoList = () => {
                         <li className="breadcrumb-item">
                             <Link to="/contact">Formulario</Link>
                         </li>
-                        <li className="breadcrumb-item active" aria-current="page">
+                        <li
+                            className="breadcrumb-item active"
+                            aria-current="page"
+                        >
                             Listar
                         </li>
                     </ol>
@@ -192,8 +220,43 @@ const ContactoList = () => {
                         )}
                     </p>
 
-                    <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {/* 🔍 BUSCADOR */}
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                        <input
+                            type="text"
+                            className="form__input"
+                            placeholder="Buscar por nombre, email o teléfono..."
+                            value={searchTerm}
+                            onChange={(e) => {
+                                setSearchTerm(e.target.value);
+                                setPage(1);
+                            }}
+                            style={{
+                                border: "2px solid #cbd5e1", // gris suave
+                                borderRadius: "6px",
+                                padding: "6px 10px",
+                                outline: "none",
+                                transition: "0.2s",
+                            }}
+                            onFocus={(e) =>
+                                (e.target.style.borderColor = "#3b82f6")
+                            } // azul suave
+                            onBlur={(e) =>
+                                (e.target.style.borderColor = "#cbd5e1")
+                            }
+                        />
+                    </div>
+
+                    <div
+                        style={{ marginLeft: "auto", display: "flex", gap: 8 }}
+                    >
+                        <label
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                            }}
+                        >
                             Tamaño de página:
                             <select
                                 className="form__input"
@@ -229,7 +292,13 @@ const ContactoList = () => {
                             <tbody>
                                 {pageItems.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} style={{ textAlign: "center", color: "#777" }}>
+                                        <td
+                                            colSpan={4}
+                                            style={{
+                                                textAlign: "center",
+                                                color: "#777",
+                                            }}
+                                        >
                                             Sin datos para mostrar.
                                         </td>
                                     </tr>
@@ -239,18 +308,26 @@ const ContactoList = () => {
                                             <td className="text__align">
                                                 {contact.nombreContact?.toUpperCase()}
                                             </td>
-                                            <td className="text__align">{contact.email}</td>
+                                            <td className="text__align">
+                                                {contact.email}
+                                            </td>
                                             <td>{contact.telefono}</td>
                                             <td className="button-action">
                                                 <button
                                                     className="btn btn-warning"
-                                                    onClick={() => showModal(contact._id)}
+                                                    onClick={() =>
+                                                        showModal(contact._id)
+                                                    }
                                                 >
                                                     Editar
                                                 </button>
                                                 <button
                                                     className="btn btn-danger"
-                                                    onClick={() => deleteContact(contact._id)}
+                                                    onClick={() =>
+                                                        deleteContact(
+                                                            contact._id
+                                                        )
+                                                    }
                                                 >
                                                     Eliminar
                                                 </button>

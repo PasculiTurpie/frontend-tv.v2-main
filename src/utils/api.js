@@ -248,14 +248,27 @@ class Api {
     getContact(){
         return this._axios.get("/contacts").then((r) => r);
     }
-    createContact(){
-        return this._axios.post("/contacts").then((r) => r);
+    createContact(values) {
+        // Enviamos el body CORRECTO (antes lo mandaba vacío)
+        const payload = {
+            nombreContact: values.nombreContact?.trim(),
+            email: values.email ? values.email.trim() : "",
+            telefono: values.telefono ? values.telefono.trim() : "",
+        };
+
+        return this._axios.post("/contacts", payload).then((r) => r);
     }
     deleteContact(id){
         return this._axios.post(`/contact/${id}`).then((r) => r);
     }
-    updateContact(id){
-        return this._axios.put(`/contact/${id}`).then((r) => r);
+    updateContact(id, values) {
+        const payload = {
+            nombreContact: values.nombreContact?.trim(),
+            email: values.email ? values.email.trim() : "",
+            telefono: values.telefono ? values.telefono.trim() : "",
+        };
+
+        return this._axios.put(`/contact/${id}`, payload).then((r) => r);
     }
     getIdContact(){
         return this._axios.get(`/contact/${id}`).then((r) => r);
