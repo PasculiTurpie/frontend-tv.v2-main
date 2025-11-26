@@ -1363,7 +1363,7 @@ const ChannelForm = () => {
               {/* Fila con etiquetas */}
               <div className="chf__grid chf__grid--align-end">
                 <label className="chf__label">
-                  Etiqueta (centro)
+                  Título
                   <Field
                     className="chf__input label-main"
                     placeholder="p.ej. TV7 Gi1/0/2 - Vlan420"
@@ -1374,7 +1374,7 @@ const ChannelForm = () => {
 
               <div className="chf__grid chf__grid--2 chf__grid--align-end">
                 <label className="chf__label">
-                  Etiqueta inicio
+                  Puerto de origen
                   <Field
                     className="chf__input"
                     placeholder="p.ej. Puerto origen"
@@ -1383,7 +1383,7 @@ const ChannelForm = () => {
                 </label>
 
                 <label className="chf__label">
-                  Etiqueta fin
+                  Puerto de destino
                   <Field
                     className="chf__input"
                     placeholder="p.ej. Puerto destino"
