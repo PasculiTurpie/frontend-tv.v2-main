@@ -17,6 +17,21 @@ import {
 } from "./handleStandard.js";
 import { makeHandle, isValidHandle } from "./handles";
 
+// 🔹 Construye SOLO la línea inferior del tooltip (Origen/Destino)
+const buildEdgeTooltip = (labelStart = "", labelEnd = "") => {
+  const hasStart = Boolean(labelStart);
+  const hasEnd = Boolean(labelEnd);
+
+  if (!hasStart && !hasEnd) return "";
+
+  const parts = [];
+  if (hasStart) parts.push(`Origen: ${labelStart}`);
+  if (hasEnd) parts.push(`Destino: ${labelEnd}`);
+
+  // Resultado: "Origen: ETH1 | Destino: Gi2/0/23"
+  return parts.join(" | ");
+};
+
 export function toPayload(nodes = [], edges = [], viewport = null) {
   const DEFAULT_SOURCE_HANDLE = makeHandle("out", "right", 1);
   const DEFAULT_TARGET_HANDLE = makeHandle("in", "left", 1);
@@ -46,19 +61,35 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
     const targetHandle = isValidHandle(edge?.targetHandle)
       ? edge.targetHandle
       : DEFAULT_TARGET_HANDLE;
+
+    const rawData = edge?.data || {};
+
+    // 🔹 Leemos SIEMPRE desde edge.data (como en tu ejemplo de JSON)
+    const labelStart =
+      rawData.labelStart ??
+      edge.labelStart ??
+      "";
+    const labelEnd =
+      rawData.labelEnd ??
+      edge.labelEnd ??
+      "";
+
     const direction =
-      edge?.data?.direction === "vuelta" || edge?.data?.direction === "bi"
-        ? edge.data.direction
+      rawData.direction === "vuelta" ||
+      rawData.direction === "bi" ||
+      rawData.direction === "ida"
+        ? rawData.direction
         : "ida";
 
-    // 🔹 Tomamos tooltipTitle/tooltip si ya existen; si no, los recomponemos
-    const labelStart = edge?.data?.labelStart || "";
-    const labelEnd = edge?.data?.labelEnd || "";
+    // 🔹 Título del tooltip (arriba) = edge.label (fallback a data.label o id)
     const tooltipTitle =
-      edge?.data?.tooltipTitle ?? (edge?.data?.label || edge?.label || edge?.id || "");
-    const tooltip =
-      edge?.data?.tooltip ??
-      [labelStart, labelEnd].filter(Boolean).join(" to ");
+      edge?.label ||
+      rawData.label ||
+      edge?.id ||
+      "";
+
+    // 🔹 Texto inferior usando Origen/Destino
+    const tooltip = buildEdgeTooltip(labelStart, labelEnd);
 
     return {
       id: edge.id,
@@ -69,11 +100,12 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
       type: "customDirectional",
       label: edge.label || "",
       data: {
+        ...rawData,
         labelStart,
         labelEnd,
         direction,
-        tooltipTitle,
-        tooltip,
+        tooltipTitle, // arriba
+        tooltip,      // abajo (Origen/Destino)
       },
       style: edge.style || {},
     };
@@ -1363,7 +1395,7 @@ const ChannelForm = () => {
               {/* Fila con etiquetas */}
               <div className="chf__grid chf__grid--align-end">
                 <label className="chf__label">
-                  Título
+                  Titulo
                   <Field
                     className="chf__input label-main"
                     placeholder="p.ej. TV7 Gi1/0/2 - Vlan420"
@@ -1374,7 +1406,7 @@ const ChannelForm = () => {
 
               <div className="chf__grid chf__grid--2 chf__grid--align-end">
                 <label className="chf__label">
-                  Puerto de origen
+                  Puerto Origen
                   <Field
                     className="chf__input"
                     placeholder="p.ej. Puerto origen"
@@ -1383,7 +1415,7 @@ const ChannelForm = () => {
                 </label>
 
                 <label className="chf__label">
-                  Puerto de destino
+                  Puerto Destino
                   <Field
                     className="chf__input"
                     placeholder="p.ej. Puerto destino"
@@ -1435,10 +1467,6 @@ const ChannelForm = () => {
                     const labelStart = values.edgeLabelStart?.trim();
                     const labelEnd = values.edgeLabelEnd?.trim();
 
-                    // 🔹 NUEVO: tooltipTitle desde Etiqueta (centro) y tooltip fusionando inicio/fin con " to "
-                    const tooltipTitle = trimmedLabel || id;
-                    const tooltip = [labelStart, labelEnd].filter(Boolean).join(" to ");
-
                     const endpointLabels = {};
                     if (labelStart) endpointLabels.source = labelStart;
                     if (labelEnd) endpointLabels.target = labelEnd;
@@ -1458,8 +1486,6 @@ const ChannelForm = () => {
                         label: trimmedLabel || id,
                         labelStart: labelStart || "",
                         labelEnd: labelEnd || "",
-                        tooltipTitle, // ✅ Etiqueta (centro)
-                        tooltip,      // ✅ "inicio to fin"
                         ...(Object.keys(endpointLabels).length
                           ? { endpointLabels }
                           : {}),

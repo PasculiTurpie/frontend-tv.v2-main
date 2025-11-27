@@ -15,6 +15,7 @@ export default function DraggableDirectionalEdge(props) {
     markerEnd,
     style,
     data = {},
+    label, // <- viene del edge de React Flow
   } = props;
 
   const isSaving = Boolean(data?.isSaving);
@@ -36,8 +37,39 @@ export default function DraggableDirectionalEdge(props) {
   const currentLabelX = data?.labelPosition?.x ?? labelX;
   const currentLabelY = data?.labelPosition?.y ?? labelY;
 
-  const tooltipTitle = data?.tooltipTitle ?? "Etiqueta centro";
-  const tooltipBody = data?.tooltip ?? "";
+  // 🔹 Helper local: construye "Origen / Destino" si no viene data.tooltip
+  const buildTooltipFromData = (d) => {
+    const start = d?.labelStart || d?.endpointLabels?.source || "";
+    const end = d?.labelEnd || d?.endpointLabels?.target || "";
+
+    const hasStart = Boolean(start);
+    const hasEnd = Boolean(end);
+
+    if (!hasStart && !hasEnd) return "";
+
+    const parts = [];
+    if (hasStart) parts.push(`Origen: ${start}`);
+    if (hasEnd) parts.push(`Destino: ${end}`);
+
+    return parts.join(" | ");
+  };
+
+  // 🔹 Título del tooltip (arriba):
+  //    1) data.tooltipTitle (si viene desde toPayload)
+  //    2) edge.label (props.label)
+  //    3) data.label
+  //    4) id
+  const tooltipTitle =
+    data?.tooltipTitle ??
+    label ??
+    data?.label ??
+    id ??
+    "Etiqueta centro";
+
+  // 🔹 Cuerpo del tooltip (abajo):
+  //    1) data.tooltip (si viene desde toPayload)
+  //    2) construido con labelStart/labelEnd
+  const tooltipBody = data?.tooltip || buildTooltipFromData(data);
 
   /* --------------------------- Tooltip --------------------------- */
   const [hover, setHover] = useState(false);
@@ -82,8 +114,9 @@ export default function DraggableDirectionalEdge(props) {
         onMouseMove={onHoverMove}
       />
 
-      {/* Label arrastrable */}
-      {/* <foreignObject
+      {/* Label arrastrable (comentado por ahora) */}
+      {/* 
+      <foreignObject
         x={(currentLabelX ?? labelX) - 60}
         y={(currentLabelY ?? labelY) - 16}
         width={120}
@@ -102,13 +135,14 @@ export default function DraggableDirectionalEdge(props) {
             fontSize: 12, cursor: "grab", userSelect: "none",
             border: `1px solid ${strokeColor}`,
           }}
-          title={data?.tooltip || ""}
+          title={tooltipBody || ""}
         >
-          {data?.label ?? "label"}
+          {label || data?.label || "label"}
         </div>
-      </foreignObject> */}
+      </foreignObject>
+      */}
 
-      {/* Tooltip al hover */}
+      {/* Tooltip "Guardando…" */}
       {isSaving && (
         <foreignObject
           x={(currentLabelX ?? labelX) - 40}
@@ -134,6 +168,7 @@ export default function DraggableDirectionalEdge(props) {
         </foreignObject>
       )}
 
+      {/* Tooltip principal al hover */}
       {hover && (tooltipBody || data?.multicast) && (
         <foreignObject
           x={(mouse.x ?? labelX) + 10}
@@ -145,7 +180,7 @@ export default function DraggableDirectionalEdge(props) {
           <div
             xmlns="http://www.w3.org/1999/xhtml"
             style={{
-              maxWidth: 'fit-content',
+              maxWidth: "fit-content",
               padding: "8px 10px",
               borderRadius: 8,
               background: "rgba(0,0,0,0.8)",
@@ -161,7 +196,7 @@ export default function DraggableDirectionalEdge(props) {
             </div>
             <div>{tooltipBody || "Sin descripción"}</div>
             {data?.multicast && (
-              <div style={{ marginTop: 6, opacity: .9 }}>
+              <div style={{ marginTop: 6, opacity: 0.9 }}>
                 Multicast: {data.multicast}
               </div>
             )}

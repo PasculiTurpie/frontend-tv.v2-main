@@ -290,10 +290,6 @@ class Api {
         return this._axios.put(`/type-tech/${id}`, values).then((r) => r);
     }
 
-
-
-
-
     getEquipo() {
         return this._axios.get("/equipos").then((r) => r);
     }
