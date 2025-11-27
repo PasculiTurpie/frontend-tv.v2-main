@@ -9,13 +9,16 @@ import { getDirectionColor } from "./directionColors";
 export default function DraggableDirectionalEdge(props) {
   const {
     id,
-    sourceX, sourceY,
-    targetX, targetY,
-    sourcePosition, targetPosition,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
     markerEnd,
     style,
     data = {},
-    label, // <- viene del edge de React Flow
+    label, // <- viene del edge de React Flow ("Enlace de ida" / "Enlace de vuelta")
   } = props;
 
   const isSaving = Boolean(data?.isSaving);
@@ -37,7 +40,7 @@ export default function DraggableDirectionalEdge(props) {
   const currentLabelX = data?.labelPosition?.x ?? labelX;
   const currentLabelY = data?.labelPosition?.y ?? labelY;
 
-  // 🔹 Helper local: construye "Origen / Destino" si no viene data.tooltip
+  // Helper local: construye "Puerto origen: X → Puerto destino: Y" desde labelStart/labelEnd
   const buildTooltipFromData = (d) => {
     const start = d?.labelStart || d?.endpointLabels?.source || "";
     const end = d?.labelEnd || d?.endpointLabels?.target || "";
@@ -45,17 +48,19 @@ export default function DraggableDirectionalEdge(props) {
     const hasStart = Boolean(start);
     const hasEnd = Boolean(end);
 
-    if (!hasStart && !hasEnd) return "";
+    if (hasStart && hasEnd) {
+      return `Puerto origen: ${start} → Puerto destino: ${end}`;
+    }
 
-    const parts = [];
-    if (hasStart) parts.push(`${start}`);
-    if (hasEnd) parts.push(`${end}`);
+    if (hasStart || hasEnd) {
+      return start || end;
+    }
 
-    return parts.join(" to ");
+    return "";
   };
 
   // 🔹 Título del tooltip (arriba):
-  //    1) data.tooltipTitle (si viene desde toPayload)
+  //    1) data.tooltipTitle (seteado en mapEdgeFromApi)
   //    2) edge.label (props.label)
   //    3) data.label
   //    4) id
@@ -67,8 +72,8 @@ export default function DraggableDirectionalEdge(props) {
     "Etiqueta centro";
 
   // 🔹 Cuerpo del tooltip (abajo):
-  //    1) data.tooltip (si viene desde toPayload)
-  //    2) construido con labelStart/labelEnd
+  //    1) data.tooltip (seteado en mapEdgeFromApi)
+  //    2) construido desde labelStart/labelEnd
   const tooltipBody = data?.tooltip || buildTooltipFromData(data);
 
   /* --------------------------- Tooltip --------------------------- */
@@ -114,8 +119,7 @@ export default function DraggableDirectionalEdge(props) {
         onMouseMove={onHoverMove}
       />
 
-      {/* Label arrastrable (comentado por ahora) */}
-      {/* 
+      {/* Label arrastrable (si algún día lo reactivas)
       <foreignObject
         x={(currentLabelX ?? labelX) - 60}
         y={(currentLabelY ?? labelY) - 16}

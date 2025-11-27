@@ -1,3 +1,4 @@
+// src/pages/ChannelDiagram/diagramUtils.js
 import { getSmoothStepPath } from "@xyflow/react";
 import { autoLabelEdge, enforceSateliteToIrd, normalizeEdgeHandles } from "./flowRules.js";
 import { ensureHandleId } from "./handleStandard.js";
@@ -106,7 +107,12 @@ const detectRouterComboFromEdge = (nodeId, edge) => {
   if (!edge) return null;
   if (edge.source !== nodeId && edge.target !== nodeId) return null;
   const data = edge.data || {};
-  const declaredDirection = data.direction === "in" ? "in" : data.direction === "out" ? "out" : null;
+  const declaredDirection =
+    data.direction === "in"
+      ? "in"
+      : data.direction === "out"
+      ? "out"
+      : null;
 
   if (declaredDirection === "out") {
     const info = parseRouterHandleId(edge.sourceHandle);
@@ -182,7 +188,9 @@ export const summarizeRouterEdges = (node, edges) => {
     if (!combo) return;
     existing.add(routerComboKey(combo));
   });
-  const missingCombos = combos.filter((combo) => !existing.has(routerComboKey(combo)));
+  const missingCombos = combos.filter(
+    (combo) => !existing.has(routerComboKey(combo))
+  );
   return {
     expected,
     existing: expected - missingCombos.length,
@@ -312,7 +320,10 @@ const compareById = (a, b) => {
   if (!idA && !idB) return 0;
   if (!idA) return -1;
   if (!idB) return 1;
-  return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: "base" });
+  return idA.localeCompare(idB, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 };
 
 export const sortNodesById = (nodes) =>
@@ -412,7 +423,8 @@ const inferTypeFromHandleId = (handleId) => {
   if (suffixMatch) {
     return suffixMatch[1] === "target" ? "target" : "source";
   }
-  const prefixMatch = /^(top|bottom|left|right)-(target|source)(?:-|$)/.exec(normalized);
+  const prefixMatch =
+    /^(top|bottom|left|right)-(target|source)(?:-|$)/.exec(normalized);
   if (prefixMatch) {
     return prefixMatch[2] === "target" ? "target" : "source";
   }
@@ -438,12 +450,14 @@ export const normalizeHandlesArray = (handles) => {
     const id = String(rawId).trim();
     if (!id) return;
 
-    const candidateType = typeof entry.type === "string" ? entry.type.toLowerCase() : typeHint;
+    const candidateType =
+      typeof entry.type === "string" ? entry.type.toLowerCase() : typeHint;
     const inferredType = inferTypeFromHandleId(id);
     const type = HANDLE_TYPES.has(candidateType) ? candidateType : inferredType;
     if (!type) return;
 
-    const candidateSide = typeof entry.side === "string" ? entry.side.toLowerCase() : sideHint;
+    const candidateSide =
+      typeof entry.side === "string" ? entry.side.toLowerCase() : sideHint;
     const inferredSide = inferSideFromHandleId(id);
     const side = HANDLE_SIDES.has(candidateSide) ? candidateSide : inferredSide;
     if (!side) return;
@@ -561,7 +575,8 @@ const normalizeEdgeType = (type) => {
   if (compact.startsWith("directional")) return "directional";
   if (compact === "direction") return "directional";
   if (compact.startsWith("waypoint")) return "waypoint";
-  if (compact === "way" || compact === "waypoints" || compact === "waypointedge") return "waypoint";
+  if (compact === "way" || compact === "waypoints" || compact === "waypointedge")
+    return "waypoint";
   if (compact.startsWith("smoothstep")) return "smoothstep";
   if (compact === "smooth" || compact === "default") return "smoothstep";
 
@@ -617,32 +632,52 @@ const normalizeEndpointLabels = (rawLabels) => {
   return result;
 };
 
+/* 🔥 AQUÍ VIENE LA FUNCIÓN MODIFICADA */
 export const mapEdgeFromApi = (edge) => {
   if (!edge) return null;
   const id = String(edge.id ?? edge._id ?? "");
   if (!id || !edge.source || !edge.target) return null;
 
   const rawData = edge.data || {};
-  const direction = rawData.direction || (edge.style?.stroke === "green" ? "vuelta" : "ida");
+
+  // direction: si no viene, inferimos por color
+  const direction =
+    rawData.direction || (edge.style?.stroke === "green" ? "vuelta" : "ida");
+
+  // label principal del edge
   const label = clampLabel(edge.label || rawData.label || id);
+
+  // color según dirección
   const color = getEdgeColor(edge.style, direction);
   const style = edge.style
     ? { ...edge.style, stroke: edge.style.stroke || color }
     : { stroke: color, strokeWidth: 2 };
 
+  // posición del label central
   const labelPosition = normalizeLabelPosition(edge);
+
+  // labels de endpoints
   let endpointLabels = normalizeEndpointLabels(rawData.endpointLabels);
+
   const rawEndpointPositions = {
-    ...(edge.endpointLabelPositions && typeof edge.endpointLabelPositions === "object"
+    ...(edge.endpointLabelPositions &&
+    typeof edge.endpointLabelPositions === "object"
       ? edge.endpointLabelPositions
       : {}),
-    ...(rawData.endpointLabelPositions && typeof rawData.endpointLabelPositions === "object"
+    ...(rawData.endpointLabelPositions &&
+    typeof rawData.endpointLabelPositions === "object"
       ? rawData.endpointLabelPositions
       : {}),
   };
-  const endpointLabelPositions = normalizeEndpointLabelPositions(rawEndpointPositions);
+
+  const endpointLabelPositions =
+    normalizeEndpointLabelPositions(rawEndpointPositions);
   const multicastPosition = toPointOrNull(rawData.multicastPosition);
-  const labelStart = clampLabel(rawData.labelStart || endpointLabels.source || "");
+
+  // puertos de origen/destino
+  const labelStart = clampLabel(
+    rawData.labelStart || endpointLabels.source || ""
+  );
   const labelEnd = clampLabel(rawData.labelEnd || endpointLabels.target || "");
   if (labelStart) {
     endpointLabels = { ...endpointLabels, source: labelStart };
@@ -651,7 +686,7 @@ export const mapEdgeFromApi = (edge) => {
     endpointLabels = { ...endpointLabels, target: labelEnd };
   }
 
-  // ✨ handles saneados (si venía "null"/"undefined"/"none", quedan como undefined y no se incluyen)
+  // handles saneados
   const sourceHandle = ensureHandleId(edge.sourceHandle) || undefined;
   const targetHandle = ensureHandleId(edge.targetHandle) || undefined;
 
@@ -664,6 +699,7 @@ export const mapEdgeFromApi = (edge) => {
     endpointLabelPositions,
     multicastPosition,
   };
+
   if (labelStart) {
     data.labelStart = labelStart;
   } else if (Object.prototype.hasOwnProperty.call(data, "labelStart")) {
@@ -673,6 +709,27 @@ export const mapEdgeFromApi = (edge) => {
     data.labelEnd = labelEnd;
   } else if (Object.prototype.hasOwnProperty.call(data, "labelEnd")) {
     delete data.labelEnd;
+  }
+
+  // 🔹 Nuevo: tooltipTitle y tooltip coherentes para ida/vuelta
+  const tooltipTitle = rawData.tooltipTitle || label;
+
+  let tooltip = rawData.tooltip;
+  if (!tooltip) {
+    if (labelStart && labelEnd) {
+      tooltip = `Puerto origen: ${labelStart} \u2192 Puerto destino: ${labelEnd}`;
+    } else if (labelStart || labelEnd) {
+      tooltip = labelStart || labelEnd;
+    } else if (rawData.multicast) {
+      tooltip = String(rawData.multicast);
+    }
+  }
+
+  data.tooltipTitle = tooltipTitle;
+  if (tooltip) {
+    data.tooltip = tooltip;
+  } else if (Object.prototype.hasOwnProperty.call(data, "tooltip")) {
+    delete data.tooltip;
   }
 
   return {
@@ -686,11 +743,14 @@ export const mapEdgeFromApi = (edge) => {
     data,
     style,
     markerEnd: withMarkerColor(edge.markerEnd, color),
-    markerStart: edge.markerStart ? withMarkerColor(edge.markerStart, color) : undefined,
+    markerStart: edge.markerStart
+      ? withMarkerColor(edge.markerStart, color)
+      : undefined,
     animated: edge.animated ?? true,
     reconnectable: true,
   };
 };
+/* 🔥 FIN mapEdgeFromApi MODIFICADA */
 
 export const toApiNode = (node) => {
   const label = clampLabel(node.data?.label ?? node.label ?? node.id);
@@ -754,7 +814,9 @@ export const toApiEdge = (edge) => {
   const labelStart = clampLabel(
     edge.data?.labelStart || endpointLabels.source || ""
   );
-  const labelEnd = clampLabel(edge.data?.labelEnd || endpointLabels.target || "");
+  const labelEnd = clampLabel(
+    edge.data?.labelEnd || endpointLabels.target || ""
+  );
   const sourceHandle = ensureHandleId(edge.sourceHandle);
   const targetHandle = ensureHandleId(edge.targetHandle);
 
@@ -790,7 +852,9 @@ export const toApiEdge = (edge) => {
     type: normalizeEdgeType(edge.type),
     style: edge.style || { stroke: color, strokeWidth: 2 },
     markerEnd: withMarkerColor(edge.markerEnd, color),
-    markerStart: edge.markerStart ? withMarkerColor(edge.markerStart, color) : undefined,
+    markerStart: edge.markerStart
+      ? withMarkerColor(edge.markerStart, color)
+      : undefined,
     data,
     animated: edge.animated ?? true,
     reconnectable: true,
@@ -815,18 +879,17 @@ export const prepareDiagramState = (diagram) => {
     return { nodes: [], edges: [] };
   }
 
-  const mappedNodes = safeArray(diagram.nodes)
-    .map(mapNodeFromApi)
-    .filter(Boolean);
-  const mappedEdges = safeArray(diagram.edges)
-    .map(mapEdgeFromApi)
-    .filter(Boolean);
+  const mappedNodes = safeArray(diagram.nodes).map(mapNodeFromApi).filter(Boolean);
+  const mappedEdges = safeArray(diagram.edges).map(mapEdgeFromApi).filter(Boolean);
 
   const sortedNodes = sortNodesById(mappedNodes);
   const nodeIdSet = new Set(sortedNodes.map((node) => node.id));
   const canonicalNodeIds = new Map();
   sortedNodes.forEach((node) => {
-    const key = typeof node.id === "string" ? node.id.trim().toLowerCase() : String(node.id ?? "").trim().toLowerCase();
+    const key =
+      typeof node.id === "string"
+        ? node.id.trim().toLowerCase()
+        : String(node.id ?? "").trim().toLowerCase();
     if (!key) return;
     if (!canonicalNodeIds.has(key)) {
       canonicalNodeIds.set(key, new Set());
@@ -852,7 +915,9 @@ export const prepareDiagramState = (diagram) => {
       return [...candidates][0];
     }
     const lower = trimmed.toLowerCase();
-    const matching = [...candidates].filter((id) => id.toLowerCase() === lower);
+    const matching = [...candidates].filter(
+      (id) => id.toLowerCase() === lower
+    );
     if (matching.length === 1) {
       return matching[0];
     }
@@ -870,8 +935,10 @@ export const prepareDiagramState = (diagram) => {
     const needsChange =
       source !== (originalSource ?? edge.source) ||
       target !== (originalTarget ?? edge.target) ||
-      (typeof edge.source === "string" && edge.source.trim() !== edge.source) ||
-      (typeof edge.target === "string" && edge.target.trim() !== edge.target);
+      (typeof edge.source === "string" &&
+        edge.source.trim() !== edge.source) ||
+      (typeof edge.target === "string" &&
+        edge.target.trim() !== edge.target);
 
     if (needsChange) {
       sanitizedEdges.push({ ...edge, source, target });
@@ -1019,7 +1086,11 @@ export const computeParallelPath = ({
   return [path, labelX + ox, labelY + oy, { ox, oy }];
 };
 
-export const resolveLabelPosition = (position, defaultPosition, clampPositionFn) => {
+export const resolveLabelPosition = (
+  position,
+  defaultPosition,
+  clampPositionFn
+) => {
   const basePosition =
     position &&
     typeof position === "object" &&
