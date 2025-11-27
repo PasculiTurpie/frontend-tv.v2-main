@@ -49,7 +49,7 @@ export default function DraggableDirectionalEdge(props) {
     const hasEnd = Boolean(end);
 
     if (hasStart && hasEnd) {
-      return `Puerto origen: ${start} → Puerto destino: ${end}`;
+      return `${start} → ${end}`;
     }
 
     if (hasStart || hasEnd) {
