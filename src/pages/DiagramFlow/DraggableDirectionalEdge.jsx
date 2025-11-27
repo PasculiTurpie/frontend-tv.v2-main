@@ -48,10 +48,10 @@ export default function DraggableDirectionalEdge(props) {
     if (!hasStart && !hasEnd) return "";
 
     const parts = [];
-    if (hasStart) parts.push(`Origen: ${start}`);
-    if (hasEnd) parts.push(`Destino: ${end}`);
+    if (hasStart) parts.push(`${start}`);
+    if (hasEnd) parts.push(`${end}`);
 
-    return parts.join(" | ");
+    return parts.join(" to ");
   };
 
   // 🔹 Título del tooltip (arriba):
