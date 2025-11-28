@@ -1398,7 +1398,7 @@ const ChannelForm = () => {
                   Titulo
                   <Field
                     className="chf__input label-main"
-                    placeholder="p.ej. TV7 Gi1/0/2 - Vlan420"
+                    placeholder="Descripción enlace..."
                     name="edgeLabel"
                   />
                 </label>
