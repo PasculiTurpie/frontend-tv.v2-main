@@ -1460,7 +1460,7 @@ const ChannelForm = () => {
                     }
 
                     const dir = edgeDirection.value;
-                    const color = dir === "vuelta" ? "green" : "red";
+                    const color = dir === "vuelta" ? "green" : "blue";
                     const handleByDir = pickHandlesByGeometry(srcNode, tgtNode, dir);
 
                     const trimmedLabel = values.edgeLabel?.trim();

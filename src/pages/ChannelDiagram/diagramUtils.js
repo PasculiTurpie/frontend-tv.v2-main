@@ -305,7 +305,7 @@ export const normalizeMarker = (marker) => {
 };
 
 export const getEdgeColor = (style, direction) =>
-  style?.stroke || (direction === "vuelta" ? "blue" : "green");
+  style?.stroke || (direction === "vuelta" ? "green" : "blue");
 
 export const withMarkerColor = (marker, color) => ({
   ...normalizeMarker(marker || ARROW_CLOSED),
