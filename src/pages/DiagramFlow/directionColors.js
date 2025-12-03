@@ -1,6 +1,6 @@
 export const EDGE_DIRECTION_COLORS = {
-    ida: "#c62828",
-    vuelta: "#2e7d32",
+    ida: "blue",
+    vuelta: "green",
     bi: "#1565c0",
 };
 
