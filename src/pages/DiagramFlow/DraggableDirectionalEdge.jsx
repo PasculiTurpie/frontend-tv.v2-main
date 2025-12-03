@@ -118,33 +118,7 @@ export default function DraggableDirectionalEdge(props) {
         onMouseLeave={() => setHover(false)}
         onMouseMove={onHoverMove}
       />
-
-      {/* Label arrastrable (si algún día lo reactivas)
-      <foreignObject
-        x={(currentLabelX ?? labelX) - 60}
-        y={(currentLabelY ?? labelY) - 16}
-        width={120}
-        height={28}
-        requiredExtensions="http://www.w3.org/1999/xhtml"
-      >
-        <div
-          xmlns="http://www.w3.org/1999/xhtml"
-          onMouseDown={onLabelMouseDown}
-          style={{
-            width: "100%", height: "100%",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 8, padding: "2px 8px",
-            background: "rgba(255,255,255,0.95)",
-            boxShadow: "0 2px 6px rgba(0,0,0,.25)",
-            fontSize: 12, cursor: "grab", userSelect: "none",
-            border: `1px solid ${strokeColor}`,
-          }}
-          title={tooltipBody || ""}
-        >
-          {label || data?.label || "label"}
-        </div>
-      </foreignObject>
-      */}
+      
 
       {/* Tooltip "Guardando…" */}
       {isSaving && (
