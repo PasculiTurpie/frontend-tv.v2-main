@@ -1893,7 +1893,7 @@ const th = {
 
 /* Encabezados/celdas compactas para la tabla de fallas (contenido ajustado) */
 const thCompact = {
-  textAlign: "center",
+  textAlign: "left",
   padding: "8px 8px",
   borderBottom: "1px solid #f0c4c4",
   whiteSpace: "nowrap",
@@ -1916,5 +1916,5 @@ const tdCompact = {
   padding: "6px 8px",
   borderBottom: "1px solid #fdeeee",
   whiteSpace: "nowrap",
-  textAlign: "center",
+  textAlign: "left",
 };
