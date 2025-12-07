@@ -1276,8 +1276,7 @@ export default function ServicesMultiHost() {
           Mostrar errores
         </label>
 
-        {/* Switch Pattern/Still como falla (opcional) */}
-        {/* 
+        {/* Switch Pattern/Still como falla (opcional)
         <label
           style={{ display: "flex", gap: 6, alignItems: "center" }}
           title="Si está activo, Pattern/Still se considerará falla de video."
@@ -1546,8 +1545,8 @@ export default function ServicesMultiHost() {
               <th
                 style={{
                   ...th,
-                  minWidth: 220,
-                  maxWidth: 280,
+                  width: "1%",
+                  whiteSpace: "nowrap",
                 }}
               >
                 Inputs IP
@@ -1676,31 +1675,36 @@ export default function ServicesMultiHost() {
                     </td>
                     <td style={td}>{r.name}</td>
 
-                    {/* Inputs IP sin bordes, solo círculo y color */}
+                    {/* Inputs IP ajustados al contenido */}
                     <td
                       style={{
                         ...td,
-                        whiteSpace: "normal",
+                        width: "1%",
+                        whiteSpace: "nowrap",
+                        verticalAlign: "top",
                       }}
                     >
                       {Array.isArray(r.ipInputs) && r.ipInputs.length > 0 ? (
                         <div
                           style={{
-                            display: "flex",
+                            display: "inline-flex",
                             flexDirection: "column",
                             gap: 4,
+                            width: "auto",
                           }}
                         >
                           {r.ipInputs.map((ii, iiIdx) => (
                             <div
                               key={iiIdx}
                               style={{
-                                display: "flex",
+                                display: "inline-flex",
                                 alignItems: "center",
                                 gap: 6,
-                                padding: "4px 6px",
+                                padding: "3px 4px",
                                 borderRadius: 4,
                                 backgroundColor: "#ffffff",
+                                width: "max-content",
+                                maxWidth: "300px",
                               }}
                               title={
                                 ii.source
@@ -1722,13 +1726,13 @@ export default function ServicesMultiHost() {
                               />
                               <span
                                 style={{
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                  minWidth: 0,
                                   flex: "1 1 auto",
                                   fontWeight: ii.isActive ? "bold" : "normal",
                                   color: ii.isActive ? "green" : "#111827",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  maxWidth: "260px",
                                 }}
                               >
                                 {ii.url || "(sin Url)"}
