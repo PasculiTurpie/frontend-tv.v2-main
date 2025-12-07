@@ -1881,7 +1881,7 @@ export default function ServicesMultiHost() {
 const th = {
   textAlign: "center",
   padding: "10px 8px",
-  borderBottom: "1px solid "#ddd",
+  borderBottom: "1px solid #ddd",
   position: "sticky",
   top: 0,
   overflow: "hidden",
