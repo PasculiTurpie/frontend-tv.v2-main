@@ -1459,7 +1459,7 @@ export default function ServicesMultiHost() {
                     <td
                       style={{
                         ...tdCompact,
-                        textAlign: "right",
+                        textAlign: "left",
                       }}
                     >
                       {r.tsErrors ?? 0}
@@ -1859,9 +1859,8 @@ export default function ServicesMultiHost() {
                     <td
                       style={{
                         ...td,
-                        textAlign: "right",
+                        textAlign: "left",
                         whiteSpace: "nowrap",
-                        alignItems:'left'
                       }}
                       title="Suma de errores de PID / CC"
                     >
@@ -1878,7 +1877,7 @@ export default function ServicesMultiHost() {
   );
 }
 
-/* Encabezados (centrados) y celdas */
+/* Encabezados (left) y celdas */
 const th = {
   textAlign: "left",
   padding: "10px 8px",
