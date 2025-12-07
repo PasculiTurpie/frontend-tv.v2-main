@@ -1879,7 +1879,7 @@ export default function ServicesMultiHost() {
 
 /* Encabezados (centrados) y celdas */
 const th = {
-  textAlign: "center",
+  textAlign: "left",
   padding: "10px 8px",
   borderBottom: "1px solid #ddd",
   position: "sticky",
@@ -1909,7 +1909,7 @@ const td = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-  textAlign: "center",
+  textAlign: "left",
 };
 
 const tdCompact = {
