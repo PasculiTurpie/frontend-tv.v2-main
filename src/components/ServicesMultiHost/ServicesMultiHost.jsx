@@ -1543,7 +1543,6 @@ export default function ServicesMultiHost() {
               <th
                 style={{
                   ...th,
-                  width: "1%",
                   whiteSpace: "nowrap",
                 }}
               >
