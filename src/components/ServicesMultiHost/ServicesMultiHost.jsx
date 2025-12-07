@@ -1694,7 +1694,7 @@ export default function ServicesMultiHost() {
                               key={iiIdx}
                               style={{
                                 display: "inline-flex",
-                                alignItems: "center",
+                                alignItems: "left",
                                 gap: 6,
                                 padding: "3px 4px",
                                 borderRadius: 4,
@@ -1861,6 +1861,7 @@ export default function ServicesMultiHost() {
                         ...td,
                         textAlign: "right",
                         whiteSpace: "nowrap",
+                        alignItems:'left'
                       }}
                       title="Suma de errores de PID / CC"
                     >
