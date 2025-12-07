@@ -13,7 +13,7 @@ import "../../components/Loader__Spinner/loader__spinner.css";
  * Listado de Señales desde múltiples hosts Titan
  * - Descubre hosts Titan desde api.getEquipo() (tipoNombre.tipoNombre === "titan")
  * - Consulta en paralelo las APIs Titans directamente (sin proxy intermedio)
- * - Columnas: Name, Input.IPInputList.Url, Outputs[0].Outputs, Fuente (pattern/still/live/fail), State.State
+ * - Columnas: Name, Inputs IP, Outputs[0].Outputs, Fuente (pattern/still/live/fail), State.State
  * - Botón Exportar CSV (aplica al filtrado)
  * - Alarmas ratificadas: Audio/Video con reglas estrictas (evita falsos positivos)
  * - Switch: Pattern/Still como falla
@@ -954,17 +954,14 @@ export default function ServicesMultiHost() {
   // 2) Cuando cambien los hosts (o terminen de cargar), ejecutar la carga de servicios
   useEffect(() => {
     if (!hostsLoading) {
-      // si hubo error al cargar hosts, igual refleja en errores
       if (hostFetchError) {
         setErrors((e) =>
           e.includes(hostFetchError) ? e : [...e, hostFetchError]
         );
       }
-      // si hay hosts, cargar servicios
       if (hosts.length > 0) {
         loadAll();
       } else if (!hostFetchError) {
-        // sin hosts y sin error explícito
         setRows([]);
       }
     }
@@ -1023,9 +1020,7 @@ export default function ServicesMultiHost() {
     () =>
       filtered.filter(
         (r) =>
-          r._explicitVideoFail || // mensaje explícito de video
-          r.audioAlarm === true || // audio en alarma por mensaje/umbral con silencio habilitado
-          r.state === "Stopped" // encoder detenido
+          r._explicitVideoFail || r.audioAlarm === true || r.state === "Stopped"
       ),
     [filtered]
   );
@@ -1107,9 +1102,10 @@ export default function ServicesMultiHost() {
         minHeight: "100vh",
       }}
     >
-      {/* estilos de botones + buscador */}
+      {/* estilos de botones + buscador + filas hover */}
       <style>{`
-        a { text-decoration: none; } /* sin subrayado */
+        a { text-decoration: none; }
+
         .btn {
           appearance: none;
           border-radius: 8px;
@@ -1196,6 +1192,11 @@ export default function ServicesMultiHost() {
           border-color: #60a5fa;
           box-shadow: 0 0 0 3px rgba(96,165,250,0.35);
         }
+
+        /* fila resaltada al pasar el mouse */
+        .table-row-hover:hover {
+          background-color: #eef2ff;
+        }
       `}</style>
 
       <h2
@@ -1275,8 +1276,12 @@ export default function ServicesMultiHost() {
           Mostrar errores
         </label>
 
-        {/* Switch Pattern/Still como falla (opcional, por ahora comentado)
-        <label style={{ display: "flex", gap: 6, alignItems: "center" }} title="Si está activo, Pattern/Still se considerará falla de video.">
+        {/* Switch Pattern/Still como falla (opcional) */}
+        {/* 
+        <label
+          style={{ display: "flex", gap: 6, alignItems: "center" }}
+          title="Si está activo, Pattern/Still se considerará falla de video."
+        >
           <input
             type="checkbox"
             checked={treatPatternAsFail}
@@ -1388,7 +1393,7 @@ export default function ServicesMultiHost() {
               </thead>
               <tbody>
                 {failingRows.map((r, i) => (
-                  <tr key={`fail-${r.ip}-${i}`}>
+                  <tr key={`fail-${r.ip}-${i}`} className="table-row-hover">
                     <td
                       style={{
                         ...tdCompact,
@@ -1537,7 +1542,7 @@ export default function ServicesMultiHost() {
               >
                 {renderSortLabel("Name", "name")}
               </th>
-              {/* NUEVA COLUMNA: Inputs IP */}
+              {/* Inputs IP */}
               <th
                 style={{
                   ...th,
@@ -1653,7 +1658,10 @@ export default function ServicesMultiHost() {
                   r.state === "Stopped" ||
                   r.audioAlarm === true;
                 return (
-                  <tr key={`${r.ip}-${idx}`}>
+                  <tr
+                    key={`${r.ip}-${idx}`}
+                    className="table-row-hover"
+                  >
                     <td style={td}>{r.host}</td>
                     <td style={td}>
                       <a
@@ -1668,7 +1676,7 @@ export default function ServicesMultiHost() {
                     </td>
                     <td style={td}>{r.name}</td>
 
-                    {/* Inputs IP con círculos y bordes rojo/verde */}
+                    {/* Inputs IP sin bordes, solo círculo y color */}
                     <td
                       style={{
                         ...td,
@@ -1691,9 +1699,6 @@ export default function ServicesMultiHost() {
                                 alignItems: "center",
                                 gap: 6,
                                 padding: "4px 6px",
-                                border: `2px solid ${
-                                  ii.isActive ? "green" : "red"
-                                }`,
                                 borderRadius: 4,
                                 backgroundColor: "#ffffff",
                               }}
