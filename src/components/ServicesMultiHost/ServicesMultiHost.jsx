@@ -1377,7 +1377,6 @@ export default function ServicesMultiHost() {
                       ...thCompact,
                       width: 36,
                       maxWidth: 36,
-                      textAlign: "center",
                     }}
                   >
                     {" "}
@@ -1398,7 +1397,6 @@ export default function ServicesMultiHost() {
                         ...tdCompact,
                         width: 36,
                         maxWidth: 36,
-                        textAlign: "center",
                       }}
                     >
                       <span
@@ -1657,10 +1655,7 @@ export default function ServicesMultiHost() {
                   r.state === "Stopped" ||
                   r.audioAlarm === true;
                 return (
-                  <tr
-                    key={`${r.ip}-${idx}`}
-                    className="table-row-hover"
-                  >
+                  <tr key={`${r.ip}-${idx}`} className="table-row-hover">
                     <td style={td}>{r.host}</td>
                     <td style={td}>
                       <a
@@ -1705,6 +1700,7 @@ export default function ServicesMultiHost() {
                                 backgroundColor: "#ffffff",
                                 width: "max-content",
                                 maxWidth: "300px",
+                                margin: "0 auto",
                               }}
                               title={
                                 ii.source
@@ -1828,7 +1824,7 @@ export default function ServicesMultiHost() {
                     >
                       <div
                         style={{
-                          display: "flex",
+                          display: "inline-flex",
                           alignItems: "center",
                           gap: 6,
                           minWidth: 0,
@@ -1912,10 +1908,12 @@ const td = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  textAlign: "center",
 };
 
 const tdCompact = {
   padding: "6px 8px",
   borderBottom: "1px solid #fdeeee",
   whiteSpace: "nowrap",
+  textAlign: "center",
 };
