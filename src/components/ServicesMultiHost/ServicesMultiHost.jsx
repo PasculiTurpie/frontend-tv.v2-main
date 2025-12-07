@@ -1484,10 +1484,11 @@ export default function ServicesMultiHost() {
       >
         <table
           style={{
-            width: "100%",
+            width: "auto",
             borderCollapse: "collapse",
             fontSize: 14,
-            tableLayout: "fixed",
+            tableLayout: "auto",
+            display: "inline-table",
           }}
         >
           <thead
@@ -1543,6 +1544,7 @@ export default function ServicesMultiHost() {
               <th
                 style={{
                   ...th,
+                  width: "1%",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -1879,7 +1881,7 @@ export default function ServicesMultiHost() {
 const th = {
   textAlign: "center",
   padding: "10px 8px",
-  borderBottom: "1px solid #ddd",
+  borderBottom: "1px solid "#ddd",
   position: "sticky",
   top: 0,
   overflow: "hidden",
