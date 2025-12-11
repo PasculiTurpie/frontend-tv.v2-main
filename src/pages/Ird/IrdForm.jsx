@@ -47,12 +47,16 @@ const IrdSchema = Yup.object().shape({
     .matches(/\d+/, "Ingrese un número"),
 });
 
+// Helper para normalizar nombres de tipo
+const normalizeName = (value) =>
+  String(value ?? "").trim().toLowerCase();
+
 // ------------------------ COMPONENTE ------------------------
 const IrdForm = () => {
   const [tipoMap, setTipoMap] = useState({}); // { 'ird': ObjectId, ... }
   const [loadingTipos, setLoadingTipos] = useState(false);
 
-  // Carga inicial de tipos de equipo y construye un mapa por nombre (lowercase)
+  // Carga inicial de tipos de equipo y construye un mapa por nombre normalizado
   useEffect(() => {
     let mounted = true;
 
@@ -60,16 +64,28 @@ const IrdForm = () => {
       try {
         setLoadingTipos(true);
         const res = await api.getTipoEquipo(); // puede ser { data: [...] } o [...]
-        const arr = res?.data || res || [];
-        const map = {};
+        // Soporta distintos formatos de respuesta
+        const raw = res?.data ?? res;
+        const arr = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.tipos)
+          ? raw.tipos
+          : Array.isArray(raw?.data)
+          ? raw.data
+          : [];
 
+        const map = {};
         for (const t of arr) {
-          if (t?.tipoNombre && t?._id) {
-            map[String(t.tipoNombre).toLowerCase()] = t._id;
+          if (t?._id && t?.tipoNombre) {
+            const key = normalizeName(t.tipoNombre);
+            map[key] = t._id;
           }
         }
 
-        if (mounted) setTipoMap(map);
+        if (mounted) {
+          setTipoMap(map);
+          console.log("TipoMap inicial:", map);
+        }
       } catch (err) {
         console.warn(
           "No se pudo cargar TipoEquipo:",
@@ -87,16 +103,26 @@ const IrdForm = () => {
 
   // Asegura que exista el tipo 'ird' y devuelve su ObjectId
   const ensureTipoId = async (name = "ird") => {
-    const key = String(name).toLowerCase();
+    const key = normalizeName(name);
 
-    // Si ya lo tenemos en el mapa, usarlo
-    if (tipoMap[key]) return tipoMap[key];
+    // 1) Si ya lo tenemos en el mapa, usarlo
+    if (tipoMap[key]) {
+      return tipoMap[key];
+    }
 
-    // Si no existe, intentamos crearlo
+    // 2) Si no existe en el mapa, intentamos crearlo
     try {
-      const created = await api.createTipoEquipo({ tipoNombre: name });
-      const createdData = created?.data || created;
-      const id = createdData?._id;
+      const created = await api.createTipoEquipo({ tipoNombre: name.trim() });
+      const raw = created?.data ?? created;
+
+      // Soporta que venga como objeto directo, o anidado
+      const createdObj = Array.isArray(raw)
+        ? raw[0]
+        : raw?.tipo || raw?.tipoEquipo || raw;
+
+      const id = createdObj?._id;
+
+      console.log("Respuesta createTipoEquipo:", created, "parsed id:", id);
 
       if (id) {
         setTipoMap((prev) => ({ ...prev, [key]: id }));
@@ -104,26 +130,42 @@ const IrdForm = () => {
       }
     } catch (error) {
       console.warn("No se pudo crear TipoEquipo 'ird'", error);
-      // Si falla crear, reintenta refrescar el listado por si existe
-      try {
-        const res = await api.getTipoEquipo();
-        const arr = res?.data || res || [];
-        const found = arr.find(
-          (t) => String(t?.tipoNombre).toLowerCase() === key
-        );
-        if (found?._id) {
-          setTipoMap((prev) => ({ ...prev, [key]: found._id }));
-          return found._id;
-        }
-      } catch (refreshError) {
-        console.warn(
-          "No se pudo refrescar TipoEquipo tras error",
-          refreshError
-        );
-      }
     }
 
-    throw new Error("No existe ni se pudo crear el TipoEquipo 'ird'.");
+    // 3) Si crear falló, reintenta refrescar el listado por si existe
+    try {
+      const res = await api.getTipoEquipo();
+      const raw = res?.data ?? res;
+      const arr = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.tipos)
+        ? raw.tipos
+        : Array.isArray(raw?.data)
+        ? raw.data
+        : [];
+
+      const found = arr.find(
+        (t) => normalizeName(t?.tipoNombre) === key
+      );
+
+      console.log("Reintento getTipoEquipo, encontrado:", found);
+
+      if (found?._id) {
+        setTipoMap((prev) => ({
+          ...prev,
+          [key]: found._id,
+        }));
+        return found._id;
+      }
+    } catch (refreshError) {
+      console.warn(
+        "No se pudo refrescar TipoEquipo tras error",
+        refreshError
+      );
+    }
+
+    // 4) Si nada funcionó, devolvemos null (NO lanzamos error aquí)
+    return null;
   };
 
   return (
@@ -181,8 +223,10 @@ const IrdForm = () => {
             try {
               // 1) Crear IRD
               const irdResp = await api.createIrd(values);
-              const ird = irdResp?.data || irdResp;
+              const ird = irdResp?.data ?? irdResp;
               const irdId = ird?._id;
+
+              console.log("IRD creado:", ird);
 
               if (!irdId) {
                 throw new Error(
@@ -190,32 +234,49 @@ const IrdForm = () => {
                 );
               }
 
-              // 2) Conseguir ObjectId del tipo 'ird'
-              const tipoIrdId = await ensureTipoId("ird");
-
-              // 3) Crear Equipo asociado (referenciando IRD)
-              let equipoOk = true;
+              // 2) Intentar conseguir ObjectId del tipo 'ird'
+              let equipoOk = false;
               let equipoMsg = "";
+              let tipoIrdId = null;
 
               try {
-                await api.createEquipo({
-                  nombre: values.nombreIrd,
-                  marca: values.marcaIrd,
-                  modelo: values.modelIrd,
-                  tipoNombre: tipoIrdId, // ObjectId del tipo ird
-                  ip_gestion: values.ipAdminIrd,
-                  irdRef: irdId, // referencia al IRD recién creado
-                });
-                equipoMsg = "Equipo creado correctamente.";
-              } catch (bgErr) {
-                equipoOk = false;
+                tipoIrdId = await ensureTipoId("ird");
+              } catch (e) {
+                console.warn("Error en ensureTipoId:", e);
                 equipoMsg =
-                  bgErr?.response?.data?.message ||
-                  "No se pudo crear Equipo desde IRD.";
-                console.warn(
-                  "No se pudo crear Equipo:",
-                  bgErr?.response?.data || bgErr
-                );
+                  e?.message ||
+                  "No se pudo asegurar el TipoEquipo 'ird'.";
+              }
+
+              // 3) Crear Equipo asociado (referenciando IRD), sólo si tenemos tipoIrdId
+              if (tipoIrdId) {
+                try {
+                  await api.createEquipo({
+                    nombre: values.nombreIrd,
+                    marca: values.marcaIrd,
+                    modelo: values.modelIrd,
+                    tipoNombre: tipoIrdId, // ObjectId del tipo ird
+                    ip_gestion: values.ipAdminIrd,
+                    irdRef: irdId, // referencia al IRD recién creado
+                  });
+                  equipoOk = true;
+                  equipoMsg = "Equipo creado correctamente.";
+                } catch (bgErr) {
+                  equipoOk = false;
+                  equipoMsg =
+                    bgErr?.response?.data?.message ||
+                    "No se pudo crear Equipo desde IRD.";
+                  console.warn(
+                    "No se pudo crear Equipo:",
+                    bgErr?.response?.data || bgErr
+                  );
+                }
+              } else {
+                equipoOk = false;
+                if (!equipoMsg) {
+                  equipoMsg =
+                    "No se encontró ni se pudo crear el TipoEquipo 'ird'. Crea el tipo manualmente y luego el equipo.";
+                }
               }
 
               // 4) Feedback y reset
@@ -229,8 +290,12 @@ const IrdForm = () => {
                     <div><b>Modelo:</b> ${values.modelIrd}</div>
                     <div><b>IP Gestión:</b> ${values.ipAdminIrd}</div>
                     <hr/>
-                    <div><b>Equipo:</b> ${equipoOk ? "Creado" : "No creado"}</div>
-                    <div style="color:${equipoOk ? "#065f46" : "#991b1b"}">${equipoMsg}</div>
+                    <div><b>Equipo:</b> ${
+                      equipoOk ? "Creado" : "No creado"
+                    }</div>
+                    <div style="color:${
+                      equipoOk ? "#065f46" : "#991b1b"
+                    }">${equipoMsg}</div>
                   </div>
                 `,
               });
