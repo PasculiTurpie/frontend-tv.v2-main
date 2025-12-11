@@ -802,6 +802,7 @@ export const DiagramFlow = () => {
 
           try {
             const response = await api.getIdIrd(idToUse);
+            console.log("getIdIrd → response.data:", JSON.stringify(response?.data, null, 2));
             data = response?.data ?? null;
 
             // Si el IRD tiene información de equipo asociada, combinarla para el sidebar.
