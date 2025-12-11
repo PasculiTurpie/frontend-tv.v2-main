@@ -349,7 +349,8 @@ const IRD_FIELD_MAP = [
 
 const buildSelectedNodeDetail = (node, apiData, options = {}) => {
   const isIrd = Boolean(options?.isIrd);
-  const nodeEquipo = node?.data?.equipo && typeof node.data.equipo === "object" ? node.data.equipo : {};
+  const nodeEquipo =
+    node?.data?.equipo && typeof node.data.equipo === "object" ? node.data.equipo : {};
   const sourceData = apiData && typeof apiData === "object" ? apiData : {};
 
   const nodeIrd =
@@ -367,9 +368,10 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
       : {};
 
   // Si hay datos del equipo desde irdRef, combinarlos con los datos del nodo
-  const equipoFromIrdRef = sourceData?.equipoDetails && typeof sourceData.equipoDetails === "object"
-    ? sourceData.equipoDetails
-    : {};
+  const equipoFromIrdRef =
+    sourceData?.equipoDetails && typeof sourceData.equipoDetails === "object"
+      ? sourceData.equipoDetails
+      : {};
 
   const mergedEquipo = { ...nodeEquipo, ...equipoFromIrdRef, ...sourceData };
   const mergedIrd = isIrd ? { ...nodeIrd, ...(apiIrd || {}) } : {};
@@ -702,15 +704,15 @@ export const DiagramFlow = () => {
     const resolvedIrdId = irdRefId ?? irdId;
     const idToUse = isIrdNode ? resolvedIrdId ?? equipoId : equipoId ?? resolvedIrdId;
 
-     console.log("DEBUG IRD NODE >>>", {
-    node: selectedNode,
-    isIrdNode,
-    equipoId,
-    irdRefId,
-    irdId,
-    resolvedIrdId,
-    idToUse,
-  });
+    console.log("DEBUG IRD NODE >>>", {
+      node: selectedNode,
+      isIrdNode,
+      equipoId,
+      irdRefId,
+      irdId,
+      resolvedIrdId,
+      idToUse,
+    });
 
     const fallbackDetail = buildSelectedNodeDetail(selectedNode, null, {
       isIrd: isIrdNode,
@@ -748,6 +750,50 @@ export const DiagramFlow = () => {
 
       try {
         let data = null;
+
+        // Fallback rápido: nodo IRD sin irdRef / irdId → usar equipo
+        if (isIrdNode && !resolvedIrdId && !localIrdData) {
+          if (equipoId) {
+            try {
+              const equipoResponse = await api.getIdEquipo(equipoId);
+              const equipoData = equipoResponse?.data ?? null;
+
+              if (cancelled) return;
+
+              const detail = buildSelectedNodeDetail(selectedNode, equipoData, {
+                isIrd: false,
+                equipoId,
+                irdId: null,
+              });
+
+              setSelectedNodeDetail(detail);
+              setSelectedNodeDetailMessage({
+                type: "warning",
+                text: "Este IRD no tiene irdRef asociado en la base de datos. Se muestran los datos del equipo.",
+              });
+            } catch (equipoErr) {
+              if (cancelled) return;
+              console.error("Error al obtener equipo para IRD sin irdRef:", equipoErr);
+              setSelectedNodeDetailMessage({
+                type: "error",
+                text: "No se pudo cargar la información del equipo asociado.",
+              });
+            } finally {
+              if (!cancelled) {
+                setSelectedNodeDetailLoading(false);
+              }
+            }
+          } else {
+            if (!cancelled) {
+              setSelectedNodeDetailMessage({
+                type: "error",
+                text: "El nodo IRD no tiene irdRef ni equipoId válidos.",
+              });
+              setSelectedNodeDetailLoading(false);
+            }
+          }
+          return;
+        }
 
         if (isIrdNode) {
           const resolveEquipoDetailsFromIrd = async (irdData, irdIdentifier) => {
@@ -812,8 +858,32 @@ export const DiagramFlow = () => {
 
           try {
             const response = await api.getIdIrd(idToUse);
-            console.log("getIdIrd → response.data:", JSON.stringify(response?.data, null, 2));
-            data = response?.data ?? null;
+            console.log(
+              "getIdIrd → response.data:",
+              JSON.stringify(response?.data, null, 2)
+            );
+            const rawData = response?.data ?? null;
+
+            // Si el backend devuelve null para el IRD, fallback al equipo
+            if (!rawData) {
+              if (equipoId) {
+                try {
+                  const equipoResponse = await api.getIdEquipo(equipoId);
+                  data = equipoResponse?.data ?? null;
+                  nextMessage = {
+                    type: "warning",
+                    text: "No se encontró el IRD en la base de datos. Se muestran los datos del equipo asociado.",
+                  };
+                } catch (equipoError) {
+                  console.error("Error al obtener equipo asociado:", equipoError);
+                  throw equipoError;
+                }
+              } else {
+                throw new Error("IRD no encontrado en la base de datos.");
+              }
+            } else {
+              data = rawData;
+            }
 
             // Si el IRD tiene información de equipo asociada, combinarla para el sidebar.
             if (data) {
