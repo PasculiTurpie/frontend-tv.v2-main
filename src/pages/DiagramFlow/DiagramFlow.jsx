@@ -702,6 +702,16 @@ export const DiagramFlow = () => {
     const resolvedIrdId = irdRefId ?? irdId;
     const idToUse = isIrdNode ? resolvedIrdId ?? equipoId : equipoId ?? resolvedIrdId;
 
+     console.log("DEBUG IRD NODE >>>", {
+    node: selectedNode,
+    isIrdNode,
+    equipoId,
+    irdRefId,
+    irdId,
+    resolvedIrdId,
+    idToUse,
+  });
+
     const fallbackDetail = buildSelectedNodeDetail(selectedNode, null, {
       isIrd: isIrdNode,
       equipoId,
