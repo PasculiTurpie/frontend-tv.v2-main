@@ -45,12 +45,8 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
       (node.data && node.data.equipo ? node.data.equipo : undefined),
     data: { ...node.data },
     position: {
-      x: Number.isFinite(Number(node?.position?.x))
-        ? Number(node.position.x)
-        : 0,
-      y: Number.isFinite(Number(node?.position?.y))
-        ? Number(node.position.y)
-        : 0,
+      x: Number.isFinite(Number(node?.position?.x)) ? Number(node.position.x) : 0,
+      y: Number.isFinite(Number(node?.position?.y)) ? Number(node.position.y) : 0,
     },
   }));
 
@@ -65,14 +61,8 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
     const rawData = edge?.data || {};
 
     // 🔹 Leemos SIEMPRE desde edge.data (como en tu ejemplo de JSON)
-    const labelStart =
-      rawData.labelStart ??
-      edge.labelStart ??
-      "";
-    const labelEnd =
-      rawData.labelEnd ??
-      edge.labelEnd ??
-      "";
+    const labelStart = rawData.labelStart ?? edge.labelStart ?? "";
+    const labelEnd = rawData.labelEnd ?? edge.labelEnd ?? "";
 
     const direction =
       rawData.direction === "vuelta" ||
@@ -82,11 +72,7 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
         : "ida";
 
     // 🔹 Título del tooltip (arriba) = edge.label (fallback a data.label o id)
-    const tooltipTitle =
-      edge?.label ||
-      rawData.label ||
-      edge?.id ||
-      "";
+    const tooltipTitle = edge?.label || rawData.label || edge?.id || "";
 
     // 🔹 Texto inferior usando Origen/Destino
     const tooltip = buildEdgeTooltip(labelStart, labelEnd);
@@ -105,7 +91,7 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
         labelEnd,
         direction,
         tooltipTitle, // arriba
-        tooltip,      // abajo (Origen/Destino)
+        tooltip, // abajo (Origen/Destino)
       },
       style: edge.style || {},
     };
@@ -116,9 +102,7 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
       ? {
           x: Number.isFinite(Number(viewport.x)) ? Number(viewport.x) : 0,
           y: Number.isFinite(Number(viewport.y)) ? Number(viewport.y) : 0,
-          zoom: Number.isFinite(Number(viewport.zoom))
-            ? Number(viewport.zoom)
-            : 1,
+          zoom: Number.isFinite(Number(viewport.zoom)) ? Number(viewport.zoom) : 1,
         }
       : null;
 
@@ -189,6 +173,21 @@ const EDGE_DIR_OPTIONS = [
   { value: "vuelta", label: "Vuelta (target ← source)" },
 ];
 
+/** 🎨 Paleta de colores para enlaces (hex) */
+const EDGE_COLOR_OPTIONS = [
+  { value: "#3b82f6", label: "Azul" }, // ida default
+  { value: "#22c55e", label: "Verde" }, // vuelta default
+  { value: "#ef4444", label: "Rojo" },
+  { value: "#f59e0b", label: "Ámbar" },
+  { value: "#a855f7", label: "Morado" },
+  { value: "#06b6d4", label: "Cian" },
+  { value: "#64748b", label: "Gris" },
+  { value: "#111827", label: "Negro" },
+];
+
+// Default según dirección
+const defaultEdgeColorByDir = (dir) => (dir === "vuelta" ? "#22c55e" : "#3b82f6");
+
 const FormValuesObserver = ({ onChange }) => {
   const { values } = useFormikContext();
   useEffect(() => {
@@ -223,7 +222,10 @@ const removeEquipoFromGroupedOptions = (grouped, valueToRemove) => {
 };
 
 // Añade (o crea) un option en el grupo correcto según tipo, manteniendo orden por label
-const insertEquipoIntoGroupedOptions = (grouped, option /* {label,value,meta:{tipo}} */) => {
+const insertEquipoIntoGroupedOptions = (
+  grouped,
+  option /* {label,value,meta:{tipo}} */
+) => {
   const tipo = option?.meta?.tipo || "";
   const labelByTipo = {
     satelite: "Satélites",
@@ -237,7 +239,8 @@ const insertEquipoIntoGroupedOptions = (grouped, option /* {label,value,meta:{ti
   const next = grouped.map((g) => ({ ...g, options: [...(g.options || [])] }));
   const idx = next.findIndex((g) => g.label === groupLabel);
 
-  const byLabel = (a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" });
+  const byLabel = (a, b) =>
+    a.label.localeCompare(b.label, "es", { sensitivity: "base" });
 
   if (idx >= 0) {
     // Evita duplicados por value
@@ -289,7 +292,12 @@ function pickHandlesByGeometry(srcNode, tgtNode, direction /* 'ida' | 'vuelta' *
       targetHandle: ensureHandleId(rawTargetHandle),
     };
 
-    const ensured = ensureEdgeHandlesForNodes(baseHandles, srcNode, tgtNode, baseHandles);
+    const ensured = ensureEdgeHandlesForNodes(
+      baseHandles,
+      srcNode,
+      tgtNode,
+      baseHandles
+    );
 
     return {
       sourceHandle: ensured.sourceHandle || baseHandles.sourceHandle,
@@ -348,6 +356,9 @@ const ChannelForm = () => {
   const [edgeSourceSel, setEdgeSourceSel] = useState(null);
   const [edgeTargetSel, setEdgeTargetSel] = useState(null);
 
+  // 🎨 Select de color
+  const [edgeColorSel, setEdgeColorSel] = useState(EDGE_COLOR_OPTIONS[0]); // Azul por defecto
+
   const [initialValues, setInitialValues] = useState(defaultFormikValues);
   const [formValues, setFormValues] = useState(defaultFormikValues);
   const [edgeDirection, setEdgeDirection] = useState(EDGE_DIR_OPTIONS[0]);
@@ -359,17 +370,14 @@ const ChannelForm = () => {
     }
   }, [isEditMode]);
 
-  const persistDraft = useCallback(
-    (payload) => {
-      if (typeof window === "undefined") return;
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      } catch (err) {
-        console.warn("No se pudo guardar el borrador del formulario:", err);
-      }
-    },
-    []
-  );
+  const persistDraft = useCallback((payload) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (err) {
+      console.warn("No se pudo guardar el borrador del formulario:", err);
+    }
+  }, []);
 
   const clearDraft = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -415,10 +423,25 @@ const ChannelForm = () => {
       if (stored?.edgeSourceSel) setEdgeSourceSel(stored.edgeSourceSel);
       if (stored?.edgeTargetSel) setEdgeTargetSel(stored.edgeTargetSel);
 
+      // 🎨 restaurar color
+      if (stored?.edgeColorSel) setEdgeColorSel(stored.edgeColorSel);
+      const storedColor = stored?.edgeColorValue;
+      if (storedColor) {
+        const found = EDGE_COLOR_OPTIONS.find((c) => c.value === storedColor);
+        if (found) setEdgeColorSel(found);
+      }
+
       const dirValue = stored?.edgeDirectionValue || stored?.edgeDirection?.value;
       if (dirValue) {
         const dirOpt = EDGE_DIR_OPTIONS.find((opt) => opt.value === dirValue);
         if (dirOpt) setEdgeDirection(dirOpt);
+
+        // si no hay color guardado, aplica default por dirección
+        if (!storedColor && !stored?.edgeColorSel) {
+          const def = defaultEdgeColorByDir(dirOpt.value);
+          const defOpt = EDGE_COLOR_OPTIONS.find((c) => c.value === def);
+          if (defOpt) setEdgeColorSel(defOpt);
+        }
       }
     } catch (err) {
       console.warn("No se pudo restaurar el borrador del formulario:", err);
@@ -448,6 +471,7 @@ const ChannelForm = () => {
           draftEdges.length ||
           edgeSourceSel ||
           edgeTargetSel ||
+          edgeColorSel ||
           (edgeDirection?.value && edgeDirection.value !== EDGE_DIR_OPTIONS[0].value)
       );
 
@@ -468,6 +492,10 @@ const ChannelForm = () => {
       edgeSourceSel,
       edgeTargetSel,
       edgeDirectionValue: edgeDirection?.value || null,
+
+      // 🎨 guardar color
+      edgeColorSel,
+      edgeColorValue: edgeColorSel?.value || null,
     });
   }, [
     draftEdges,
@@ -475,6 +503,7 @@ const ChannelForm = () => {
     edgeDirection,
     edgeSourceSel,
     edgeTargetSel,
+    edgeColorSel,
     formValues,
     clearDraft,
     persistDraft,
@@ -524,9 +553,12 @@ const ChannelForm = () => {
         setEdgeSourceSel(null);
         setEdgeTargetSel(null);
         setEdgeDirection(EDGE_DIR_OPTIONS[0]);
+        setEdgeColorSel(EDGE_COLOR_OPTIONS[0]); // default azul
 
         const signalData = diagram?.signal || diagram?.signalId || diagram?.channel;
-        const signalId = toId(signalData) || (typeof signalData === "string" ? signalData : null);
+        const signalId =
+          toId(signalData) ||
+          (typeof signalData === "string" ? signalData : null);
         if (signalId) {
           const signalLabel =
             formatSignalLabel(
@@ -652,7 +684,9 @@ const ChannelForm = () => {
           }
 
           if (prevSelectedValue) {
-            const match = options.find((o) => String(o.value) === String(prevSelectedValue));
+            const match = options.find(
+              (o) => String(o.value) === String(prevSelectedValue)
+            );
             if (match) {
               setSelectedId(match.label);
               return prevSelectedValue;
@@ -692,10 +726,9 @@ const ChannelForm = () => {
         for (const eq of arr) {
           const key = tipoToKey(eq?.tipoNombre);
           const baseName = (eq?.nombre?.toUpperCase?.() || eq?.nombre || "").trim();
-          const pol =
-            eq?.satelliteRef?.satelliteType?.typePolarization
-              ? String(eq.satelliteRef.satelliteType.typePolarization).trim()
-              : null;
+          const pol = eq?.satelliteRef?.satelliteType?.typePolarization
+            ? String(eq.satelliteRef.satelliteType.typePolarization).trim()
+            : null;
 
           const option = {
             label: key === "satelite" && pol ? `${baseName} ${pol}` : baseName,
@@ -710,8 +743,13 @@ const ChannelForm = () => {
           else otros.push(option);
         }
 
-        const byLabel = (a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" });
-        satelites.sort(byLabel); irds.sort(byLabel); switches.sort(byLabel); routers.sort(byLabel); otros.sort(byLabel);
+        const byLabel = (a, b) =>
+          a.label.localeCompare(b.label, "es", { sensitivity: "base" });
+        satelites.sort(byLabel);
+        irds.sort(byLabel);
+        switches.sort(byLabel);
+        routers.sort(byLabel);
+        otros.sort(byLabel);
 
         const grouped = [
           { label: "Satélites", options: satelites },
@@ -722,14 +760,18 @@ const ChannelForm = () => {
         ].filter((g) => g.options.length > 0);
 
         if (mounted) {
-          setAllEquipoOptions(grouped.map((g) => ({
-            label: g.label,
-            options: [...g.options],
-          })));
-          setOptionSelectEquipo(grouped.map((g) => ({
-            label: g.label,
-            options: [...g.options],
-          })));
+          setAllEquipoOptions(
+            grouped.map((g) => ({
+              label: g.label,
+              options: [...g.options],
+            }))
+          );
+          setOptionSelectEquipo(
+            grouped.map((g) => ({
+              label: g.label,
+              options: [...g.options],
+            }))
+          );
           setEquiposLoaded(true);
         }
       } catch (e) {
@@ -773,6 +815,7 @@ const ChannelForm = () => {
     setSelectedValue(e?.value || null);
     setSelectedId(e?.label || null);
   };
+
   const handleSelectedEquipo = (e) => {
     setSelectedEquipoValue(e?.value || null);
     setSelectedIdEquipo(e?.label || null);
@@ -903,6 +946,7 @@ const ChannelForm = () => {
     setEdgeSourceSel(null);
     setEdgeTargetSel(null);
     setEdgeDirection(EDGE_DIR_OPTIONS[0]);
+    setEdgeColorSel(EDGE_COLOR_OPTIONS[0]); // 🎨 reset color
 
     // 3) limpiar selección de equipo
     setSelectedEquipoValue(null);
@@ -910,9 +954,7 @@ const ChannelForm = () => {
     setSelectedEquipoTipo(null);
 
     // 4) restaurar listado de equipos al estado original (clon)
-    setOptionSelectEquipo(
-      allEquipoOptions.map((g) => ({ label: g.label, options: [...g.options] }))
-    );
+    setOptionSelectEquipo(allEquipoOptions.map((g) => ({ label: g.label, options: [...g.options] })));
 
     Swal.fire({
       icon: "success",
@@ -939,14 +981,18 @@ const ChannelForm = () => {
   );
 
   const selectedSignalOption = useMemo(
-    () => optionsSelectChannel.find((opt) => String(opt.value) === String(selectedValue)) || null,
+    () =>
+      optionsSelectChannel.find((opt) => String(opt.value) === String(selectedValue)) ||
+      null,
     [optionsSelectChannel, selectedValue]
   );
 
   const selectedEquipoOption = useMemo(() => {
     if (!selectedEquipoValue) return null;
     for (const group of optionsSelectEquipo) {
-      const found = group.options?.find((opt) => String(opt.value) === String(selectedEquipoValue));
+      const found = group.options?.find(
+        (opt) => String(opt.value) === String(selectedEquipoValue)
+      );
       if (found) return found;
     }
     return null;
@@ -970,8 +1016,6 @@ const ChannelForm = () => {
       console.info("localStorage limpiado por click en 'Crear flujo'");
     }
   }, [isEditMode]);
-
-  const availableSignals = optionsSelectChannel.length;
 
   if (isEditMode && channelError) {
     return (
@@ -1018,9 +1062,7 @@ const ChannelForm = () => {
         <div className="chf__alert chf__alert--info">Cargando diagrama para edición…</div>
       ) : null}
       {isEditMode && !loadingChannel && currentChannel?.metadata?.title ? (
-        <div className="chf__alert chf__alert--muted">
-          {currentChannel.metadata.title}
-        </div>
+        <div className="chf__alert chf__alert--muted">{currentChannel.metadata.title}</div>
       ) : null}
 
       <Formik
@@ -1111,6 +1153,7 @@ const ChannelForm = () => {
             setEdgeSourceSel(null);
             setEdgeTargetSel(null);
             setEdgeDirection(EDGE_DIR_OPTIONS[0]);
+            setEdgeColorSel(EDGE_COLOR_OPTIONS[0]); // 🎨 reset
             setSelectedValue(null);
             setSelectedId(null);
             setSelectedEquipoValue(null);
@@ -1147,12 +1190,19 @@ const ChannelForm = () => {
         {({ values, setFieldValue }) => (
           <Form className="chf__form">
             <FormValuesObserver onChange={handleFormValuesChange} />
+
             {/* ---- Señal ---- */}
             <fieldset className="chf__fieldset">
               <legend className="chf__legend">Señal</legend>
 
               {signalsLoading ? (
-                <Select className="select-width" isLoading isDisabled placeholder="Cargando señales…" styles={selectStyles} />
+                <Select
+                  className="select-width"
+                  isLoading
+                  isDisabled
+                  placeholder="Cargando señales…"
+                  styles={selectStyles}
+                />
               ) : signalsError ? (
                 <div className="chf__alert chf__alert--error">
                   <strong>Error al cargar señales.</strong>
@@ -1165,7 +1215,9 @@ const ChannelForm = () => {
               ) : optionsSelectChannel.length === 0 ? (
                 <div className="chf__empty">
                   <h4>No hay señales disponibles</h4>
-                  <p>Todas las señales ya están vinculadas a un diagrama. Crea una nueva señal para continuar.</p>
+                  <p>
+                    Todas las señales ya están vinculadas a un diagrama. Crea una nueva señal para continuar.
+                  </p>
                   <button
                     type="button"
                     className="chf__btn chf__btn--primary"
@@ -1201,7 +1253,10 @@ const ChannelForm = () => {
 
             {/* ---- Nodo ---- */}
             <fieldset className="chf__fieldset">
-              <legend className="chf__legend" style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:8}}>
+              <legend
+                className="chf__legend"
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+              >
                 <span>Agregar nodo</span>
                 <button
                   type="button"
@@ -1385,42 +1440,82 @@ const ChannelForm = () => {
                     className="chf__select"
                     options={EDGE_DIR_OPTIONS}
                     value={edgeDirection}
-                    onChange={(opt) => setEdgeDirection(opt)}
+                    onChange={(opt) => {
+                      setEdgeDirection(opt);
+
+                      // si el usuario no eligió color manualmente, te dejo el comportamiento simple:
+                      // (no forzamos, solo sugerimos si está en default)
+                      const maybeDefault = EDGE_COLOR_OPTIONS[0]?.value;
+                      const isUsingFirstDefault = (edgeColorSel?.value || "") === (maybeDefault || "");
+                      if (isUsingFirstDefault) {
+                        const def = defaultEdgeColorByDir(opt?.value);
+                        const defOpt = EDGE_COLOR_OPTIONS.find((c) => c.value === def);
+                        if (defOpt) setEdgeColorSel(defOpt);
+                      }
+                    }}
                     placeholder="Dirección"
                     styles={selectStyles}
                   />
                 </label>
               </div>
 
+              {/* 🎨 Selector de color */}
+              <div className="chf__grid chf__grid--2 chf__grid--align-end">
+                <label className="chf__label">
+                  Color del enlace
+                  <Select
+                    className="chf__select"
+                    options={EDGE_COLOR_OPTIONS}
+                    value={edgeColorSel}
+                    onChange={(opt) => setEdgeColorSel(opt)}
+                    styles={selectStyles}
+                    formatOptionLabel={(opt) => (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span
+                          style={{
+                            width: 14,
+                            height: 14,
+                            borderRadius: 4,
+                            background: opt.value,
+                            border: "1px solid rgba(0,0,0,0.15)",
+                          }}
+                        />
+                        <span>{opt.label}</span>
+                        <code style={{ marginLeft: "auto", opacity: 0.7 }}>{opt.value}</code>
+                      </div>
+                    )}
+                  />
+                </label>
+
+                <div className="chf__label" style={{ marginTop: 22 }}>
+                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>Vista previa</div>
+                  <div
+                    style={{
+                      height: 10,
+                      borderRadius: 999,
+                      background: edgeColorSel?.value || "#3b82f6",
+                    }}
+                  />
+                </div>
+              </div>
+
               {/* Fila con etiquetas */}
               <div className="chf__grid chf__grid--align-end">
                 <label className="chf__label">
                   Titulo
-                  <Field
-                    className="chf__input label-main"
-                    placeholder="Descripción enlace..."
-                    name="edgeLabel"
-                  />
+                  <Field className="chf__input label-main" placeholder="Descripción enlace..." name="edgeLabel" />
                 </label>
               </div>
 
               <div className="chf__grid chf__grid--2 chf__grid--align-end">
                 <label className="chf__label">
                   Puerto Origen
-                  <Field
-                    className="chf__input"
-                    placeholder="p.ej. Puerto origen"
-                    name="edgeLabelStart"
-                  />
+                  <Field className="chf__input" placeholder="p.ej. Puerto origen" name="edgeLabelStart" />
                 </label>
 
                 <label className="chf__label">
                   Puerto Destino
-                  <Field
-                    className="chf__input"
-                    placeholder="p.ej. Puerto destino"
-                    name="edgeLabelEnd"
-                  />
+                  <Field className="chf__input" placeholder="p.ej. Puerto destino" name="edgeLabelEnd" />
                 </label>
               </div>
 
@@ -1460,7 +1555,10 @@ const ChannelForm = () => {
                     }
 
                     const dir = edgeDirection.value;
-                    const color = dir === "vuelta" ? "green" : "blue";
+
+                    // ✅ Color elegido (o default por dirección si algo viene vacío)
+                    const color = edgeColorSel?.value || defaultEdgeColorByDir(dir);
+
                     const handleByDir = pickHandlesByGeometry(srcNode, tgtNode, dir);
 
                     const trimmedLabel = values.edgeLabel?.trim();
@@ -1483,12 +1581,11 @@ const ChannelForm = () => {
                       markerEnd: { ...ARROW_CLOSED },
                       data: {
                         direction: dir,
+                        color, // ✅ persistimos el color como dato
                         label: trimmedLabel || id,
                         labelStart: labelStart || "",
                         labelEnd: labelEnd || "",
-                        ...(Object.keys(endpointLabels).length
-                          ? { endpointLabels }
-                          : {}),
+                        ...(Object.keys(endpointLabels).length ? { endpointLabels } : {}),
                       },
                     };
 
@@ -1510,6 +1607,7 @@ const ChannelForm = () => {
                     setEdgeSourceSel(null);
                     setEdgeTargetSel(null);
                     setEdgeDirection(EDGE_DIR_OPTIONS[0]);
+                    setEdgeColorSel(EDGE_COLOR_OPTIONS[0]); // 🎨 reset a azul
                   }}
                 >
                   + Agregar enlace
@@ -1520,10 +1618,10 @@ const ChannelForm = () => {
                 <ul className="chf__list">
                   {draftEdges.map((e) => {
                     const label = e?.data?.label || "";
-                    const labelStart =
-                      e?.data?.labelStart || e?.data?.endpointLabels?.source || "";
-                    const labelEnd =
-                      e?.data?.labelEnd || e?.data?.endpointLabels?.target || "";
+                    const labelStart = e?.data?.labelStart || e?.data?.endpointLabels?.source || "";
+                    const labelEnd = e?.data?.labelEnd || e?.data?.endpointLabels?.target || "";
+                    const edgeColor = e?.data?.color || e?.style?.stroke || "#475569";
+
                     return (
                       <li
                         key={e.id}
@@ -1531,21 +1629,34 @@ const ChannelForm = () => {
                         style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
                       >
                         <div style={{ flex: "1 1 auto" }}>
-                          <code>{e.id}</code> — {e.source} ({e.sourceHandle}) → {e.target} (
-                          {e.targetHandle}) — {label}
+                          <code>{e.id}</code> — {e.source} ({e.sourceHandle}) → {e.target} ({e.targetHandle}) — {label}
                           {labelStart ? (
                             <span className="chf__badge chf__badge--muted">ini: {labelStart}</span>
                           ) : null}
                           {labelEnd ? (
                             <span className="chf__badge chf__badge--muted">fin: {labelEnd}</span>
                           ) : null}
+
+                          {/* 🎨 swatch color */}
                           <span
-                            className="chf__muted"
-                            style={{ marginLeft: 8, color: e.style?.stroke || "#475569" }}
-                          >
+                            title={edgeColor}
+                            style={{
+                              display: "inline-block",
+                              width: 12,
+                              height: 12,
+                              borderRadius: 3,
+                              marginLeft: 8,
+                              background: edgeColor,
+                              border: "1px solid rgba(0,0,0,0.15)",
+                              verticalAlign: "middle",
+                            }}
+                          />
+
+                          <span className="chf__muted" style={{ marginLeft: 8, color: edgeColor }}>
                             {e.data?.direction}
                           </span>
                         </div>
+
                         <button
                           type="button"
                           className="chf__btn chf__btn--danger"
