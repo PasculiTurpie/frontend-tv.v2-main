@@ -50,8 +50,7 @@ export default function DraggableDirectionalEdge(props) {
     return "";
   };
 
-  const tooltipTitle =
-    data?.tooltipTitle ?? label ?? data?.label ?? id ?? "Etiqueta centro";
+  const tooltipTitle = data?.tooltipTitle ?? label ?? data?.label ?? id ?? "Etiqueta centro";
   const tooltipBody = data?.tooltip || buildTooltipFromData(data);
 
   /* --------------------------- Color --------------------------- */
@@ -77,7 +76,7 @@ export default function DraggableDirectionalEdge(props) {
   /* --------------------------- Tooltip (Portal) --------------------------- */
   // Transform del canvas (x,y,zoom) + domNode de ReactFlow
   const transform = useStore((s) => s.transform); // [x, y, zoom]
-  const rfDomNode = useStore((s) => s.domNode);   // contenedor del renderer
+  const rfDomNode = useStore((s) => s.domNode); // contenedor del renderer
 
   const hideTimerRef = useRef(null);
   const [hover, setHover] = useState(false);
@@ -98,8 +97,9 @@ export default function DraggableDirectionalEdge(props) {
   const hideTooltipDelayed = useCallback(() => {
     clearHideTimer();
     hideTimerRef.current = setTimeout(() => {
+      // ✅ anti-parpadeo + respeta sticky
       if (!sticky) setHover(false);
-    }, 120);
+    }, 240);
   }, [sticky]);
 
   useEffect(() => {
@@ -131,39 +131,39 @@ export default function DraggableDirectionalEdge(props) {
     return { left, top, zoom };
   }, [transform, rfDomNode, tipPos.x, tipPos.y]);
 
-  const tooltipPortal = hover && (tooltipBody || data?.multicast)
-    ? createPortal(
-        <div
-          className={`edge-tooltip-portal ${sticky ? "edge-tooltip-portal--sticky" : ""}`}
-          style={{
-            position: "fixed",
-            left: screenPos.left + 10,
-            top: screenPos.top + 10,
-            zIndex: 2147483647, // 🔥 MAX z-index práctico
-            pointerEvents: "auto",
-          }}
-          onMouseEnter={showTooltip}
-          onMouseLeave={hideTooltipDelayed}
-          onClick={(e) => {
-            e.stopPropagation();
-            setSticky((v) => !v); // click = fija / libera
-          }}
-          role="tooltip"
-        >
-          <div className="edge-tooltip-portal__title">{tooltipTitle}</div>
-          <div className="edge-tooltip-portal__body">{tooltipBody || "Sin descripción"}</div>
+  const tooltipPortal =
+    hover && (tooltipBody || data?.multicast)
+      ? createPortal(
+          <div
+            // ✅ usa tu CSS existente
+            className={`edge-tooltip ${sticky ? "edge-tooltip--sticky" : ""}`}
+            style={{
+              left: screenPos.left + 10,
+              top: screenPos.top + 10,
+            }}
+            onMouseEnter={showTooltip}
+            onMouseLeave={hideTooltipDelayed}
+            onMouseDown={(e) => e.stopPropagation()} // ✅ evita pane click / drag raros
+            onClick={(e) => {
+              e.stopPropagation();
+              setSticky((v) => !v); // click = fija / libera
+            }}
+            role="tooltip"
+          >
+            <div className="edge-tooltip__title">
+              <span>{tooltipTitle}</span>
+              <span className="edge-tooltip__pin">{sticky ? "📌" : ""}</span>
+            </div>
 
-          {data?.multicast && (
-            <div className="edge-tooltip-portal__muted">Multicast: {data.multicast}</div>
-          )}
+            <div className="edge-tooltip__body">{tooltipBody || "Sin descripción"}</div>
 
-          <div className="edge-tooltip-portal__hint">
-            {sticky ? "Fijado (click para soltar)" : "Click para fijar"}
-          </div>
-        </div>,
-        document.body
-      )
-    : null;
+            {data?.multicast && (
+              <div className="edge-tooltip__extra">Multicast: {data.multicast}</div>
+            )}
+          </div>,
+          document.body
+        )
+      : null;
 
   /* ----------------------- Render del Edge ----------------------- */
   return (

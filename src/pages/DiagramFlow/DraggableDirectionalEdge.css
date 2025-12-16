@@ -5,7 +5,9 @@
 }
 
 @keyframes dash-move {
-  to { stroke-dashoffset: -12; }
+  to {
+    stroke-dashoffset: -12;
+  }
 }
 
 /* ===========================
@@ -13,25 +15,25 @@
    =========================== */
 
 .edge-tooltip {
-  background: rgba(0,0,0,.85);
+  background: rgba(0, 0, 0, 0.85);
   color: #fff;
   padding: 8px 10px;
   border-radius: 10px;
   font-size: 12px;
   line-height: 1.3;
-  box-shadow: 0 10px 24px rgba(0,0,0,.25);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
 
   /* ✅ clave: el tooltip debe poder capturar el mouse para NO parpadear */
   pointer-events: auto;
 
   /* ✅ ya no sirve "relative" dentro del SVG: el tooltip ahora irá en portal */
-  position: fixed;               /* ✅ necesario para top/left globales */
-  z-index: 2147483647 !important;/* ✅ máximo práctico */
+  position: fixed; /* ✅ necesario para top/left globales */
+  z-index: 2147483647 !important; /* ✅ máximo práctico */
   max-width: 260px;
 }
 
 .edge-tooltip--sticky {
-  border: 1px solid rgba(255,255,255,.25);
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 .edge-tooltip__title {
@@ -44,19 +46,24 @@
 
 .edge-tooltip__pin {
   margin-left: 6px;
-  opacity: .85;
+  opacity: 0.85;
+}
+
+/* ✅ NUEVO: body del tooltip */
+.edge-tooltip__body {
+  opacity: 0.95;
 }
 
 .edge-tooltip__extra {
   margin-top: 6px;
-  opacity: .9;
+  opacity: 0.9;
   font-size: 11px;
 }
 
 .edge-saving-tooltip {
   padding: 4px 6px;
   border-radius: 6px;
-  background: rgba(13,110,253,0.85);
+  background: rgba(13, 110, 253, 0.85);
   color: #fff;
   font-size: 11px;
   font-weight: 600;
@@ -67,6 +74,12 @@
    React Flow layering (no afecta al tooltip portal)
    ========================================================= */
 
-.react-flow__renderer { z-index: 0; }
-.react-flow__edge-path { z-index: 1; }
-.react-flow__node { z-index: 2; }
+.react-flow__renderer {
+  z-index: 0;
+}
+.react-flow__edge-path {
+  z-index: 1;
+}
+.react-flow__node {
+  z-index: 2;
+}
