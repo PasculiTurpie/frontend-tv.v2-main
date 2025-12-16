@@ -631,6 +631,13 @@ a{
     animation: rikSpikeRoll 0.65s linear infinite alternate;
 }
 
+/* Tooltip edge (portal) - prioridad global */
+.edge-tooltip {
+  position: fixed !important;
+  z-index: 2147483647 !important; /* por encima de modales (1000) */
+  pointer-events: auto !important;
+}
+
 @keyframes rikSpikeRoll {
     0% {
         background-size: 10px 3px;
