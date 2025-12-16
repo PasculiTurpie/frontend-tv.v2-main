@@ -1,259 +1,218 @@
-import { getSmoothStepPath } from "@xyflow/react";
-import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+// src/pages/ChannelDiagram/edges/DraggableDirectionalEdge.jsx
+import { getSmoothStepPath, useStore } from "@xyflow/react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 
-import "./DraggableDirectionalEdge.css";
+import "../DiagramFlow.css"; // ⚠️ tu CSS está en DiagramFlow.css
 import { getDirectionColor } from "./directionColors";
 
 export default function DraggableDirectionalEdge(props) {
-    const {
-        id,
-        sourceX,
-        sourceY,
-        targetX,
-        targetY,
-        sourcePosition,
-        targetPosition,
-        style,
-        data = {},
-        label,
-    } = props;
+  const {
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    style,
+    data = {},
+    label,
+  } = props;
 
-    const isSaving = Boolean(data?.isSaving);
+  const isSaving = Boolean(data?.isSaving);
 
-    /* ---------------- Path ---------------- */
-    const [edgePath, labelX, labelY] = useMemo(() => {
-        return getSmoothStepPath({
-            sourceX,
-            sourceY,
-            targetX,
-            targetY,
-            sourcePosition,
-            targetPosition,
-            borderRadius: 12,
-        });
-    }, [sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition]);
+  const [edgePath, labelX, labelY] = useMemo(() => {
+    return getSmoothStepPath({
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      sourcePosition,
+      targetPosition,
+      borderRadius: 12,
+    });
+  }, [sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition]);
 
-    const currentLabelX = data?.labelPosition?.x ?? labelX;
-    const currentLabelY = data?.labelPosition?.y ?? labelY;
+  // Centro real (respeta labelPosition si existe)
+  const currentLabelX = data?.labelPosition?.x ?? labelX;
+  const currentLabelY = data?.labelPosition?.y ?? labelY;
 
-    /* ---------------- Tooltip content ---------------- */
-    const buildTooltipFromData = (d) => {
-        const start = d?.labelStart || d?.endpointLabels?.source || "";
-        const end = d?.labelEnd || d?.endpointLabels?.target || "";
-        if (start && end) return `${start} → ${end}`;
-        return start || end || "";
+  const buildTooltipFromData = (d) => {
+    const start = d?.labelStart || d?.endpointLabels?.source || "";
+    const end = d?.labelEnd || d?.endpointLabels?.target || "";
+    if (start && end) return `${start} → ${end}`;
+    return start || end || "";
+  };
+
+  const tooltipTitle =
+    data?.tooltipTitle ?? label ?? data?.label ?? id ?? "Etiqueta centro";
+  const tooltipBody = data?.tooltip || buildTooltipFromData(data);
+
+  // Color elegido
+  const direction = data?.direction ?? "ida";
+  const chosenColor = data?.color || style?.stroke || getDirectionColor(direction);
+
+  const animatedStyle = {
+    stroke: chosenColor,
+    strokeWidth: 2,
+    ...style,
+  };
+
+  /* -------------------- Marker heredando color -------------------- */
+  const markerId = useMemo(() => {
+    const safe = String(id || "edge").replace(/[^a-zA-Z0-9_-]/g, "_");
+    return `arrowclosed_${safe}`;
+  }, [id]);
+
+  const markerUrl = `url(#${markerId})`;
+
+  /* ---------------- Tooltip portal (fixed) ---------------- */
+  const transform = useStore((s) => s.transform); // [x,y,zoom]
+  const rfDomNode = useStore((s) => s.domNode);
+
+  const hideTimerRef = useRef(null);
+  const [hover, setHover] = useState(false);
+  const [sticky, setSticky] = useState(false);
+
+  const clearHideTimer = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+
+  const showTooltip = useCallback(() => {
+    clearHideTimer();
+    setHover(true);
+  }, []);
+
+  const hideTooltipDelayed = useCallback(() => {
+    clearHideTimer();
+    hideTimerRef.current = setTimeout(() => {
+      // si está fijado, no lo escondas
+      if (!sticky) setHover(false);
+    }, 140);
+  }, [sticky]);
+
+  useEffect(() => () => clearHideTimer(), []);
+
+  const screenPos = useMemo(() => {
+    const [tx, ty, zoom] = Array.isArray(transform) ? transform : [0, 0, 1];
+    const x = Number.isFinite(currentLabelX) ? currentLabelX : labelX;
+    const y = Number.isFinite(currentLabelY) ? currentLabelY : labelY;
+
+    if (!rfDomNode || typeof rfDomNode.getBoundingClientRect !== "function") {
+      return { left: 0, top: 0 };
+    }
+
+    const rect = rfDomNode.getBoundingClientRect();
+    return {
+      left: rect.left + x * zoom + tx,
+      top: rect.top + y * zoom + ty,
     };
+  }, [transform, rfDomNode, currentLabelX, currentLabelY, labelX, labelY]);
 
-    const tooltipTitle =
-        data?.tooltipTitle ?? label ?? data?.label ?? id ?? "Etiqueta centro";
+  const tooltipPortal =
+    hover && (tooltipBody || data?.multicast)
+      ? createPortal(
+          <div
+            className={`edge-tooltip ${sticky ? "edge-tooltip--sticky" : ""}`}
+            style={{
+              left: `${screenPos.left + 10}px`,
+              top: `${screenPos.top + 10}px`,
+            }}
+            onMouseEnter={showTooltip}
+            onMouseLeave={hideTooltipDelayed}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSticky((v) => !v); // click = fijar/soltar
+            }}
+            role="tooltip"
+          >
+            <div className="edge-tooltip__title">
+              <span>{tooltipTitle}</span>
+              <span className="edge-tooltip__pin" title="Click para fijar / soltar">
+                {sticky ? "📌" : "📍"}
+              </span>
+            </div>
 
-    const tooltipBody = data?.tooltip || buildTooltipFromData(data);
+            <div>{tooltipBody || "Sin descripción"}</div>
 
-    /* ---------------- Hover + Sticky ---------------- */
-    const [hover, setHover] = useState(false);
-    const [sticky, setSticky] = useState(false);
-    const hideTimerRef = useRef(null);
-
-    /* ✅ Posición del tooltip = centro real del path */
-    const pathRef = useRef(null);
-    const [tipPos, setTipPos] = useState({ x: labelX, y: labelY });
-
-    const computeMidpointOnPath = useCallback(() => {
-        const p = pathRef.current;
-        if (!p) return;
-
-        try {
-            const len = p.getTotalLength();
-            const mid = p.getPointAtLength(len / 2);
-            if (mid && Number.isFinite(mid.x) && Number.isFinite(mid.y)) {
-                setTipPos({ x: mid.x, y: mid.y });
-                return;
-            }
-        } catch {
-            // fallback abajo
-        }
-
-        // Fallback: promedio simple
-        const fallbackX = (Number(sourceX) + Number(targetX)) / 2;
-        const fallbackY = (Number(sourceY) + Number(targetY)) / 2;
-        setTipPos({
-            x: Number.isFinite(fallbackX) ? fallbackX : labelX,
-            y: Number.isFinite(fallbackY) ? fallbackY : labelY,
-        });
-    }, [sourceX, sourceY, targetX, targetY, labelX, labelY]);
-
-    const showTooltip = () => {
-        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-        computeMidpointOnPath(); // ✅ calcula el centro del edge al pasar mouse
-        setHover(true);
-    };
-
-    const hideTooltipDelayed = () => {
-        if (sticky) return;
-        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-        hideTimerRef.current = setTimeout(() => setHover(false), 120);
-    };
-
-    const toggleSticky = (e) => {
-        e.stopPropagation();
-        computeMidpointOnPath();
-        setSticky((prev) => !prev);
-        setHover(true);
-    };
-
-    /* cerrar sticky con ESC o click fuera */
-    useEffect(() => {
-        if (!sticky) return;
-
-        const onKey = (e) => {
-            if (e.key === "Escape") {
-                setSticky(false);
-                setHover(false);
-            }
-        };
-
-        const onClickOutside = () => {
-            setSticky(false);
-            setHover(false);
-        };
-
-        window.addEventListener("keydown", onKey);
-        window.addEventListener("click", onClickOutside);
-
-        return () => {
-            window.removeEventListener("keydown", onKey);
-            window.removeEventListener("click", onClickOutside);
-        };
-    }, [sticky]);
-
-    useEffect(() => {
-        return () => {
-            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-        };
-    }, []);
-
-    /* ---------------- Estilos ---------------- */
-    const direction = data?.direction ?? "ida";
-
-    const chosenColor =
-        data?.color || style?.stroke || getDirectionColor(direction);
-
-    const animatedStyle = {
-        stroke: chosenColor,
-        strokeWidth: 2,
-        ...style,
-    };
-
-    /* ---------------- Marker heredando color ---------------- */
-    const markerId = useMemo(() => {
-        const safe = String(id || "edge").replace(/[^a-zA-Z0-9_-]/g, "_");
-        return `arrowclosed_${safe}`;
-    }, [id]);
-
-    const markerUrl = `url(#${markerId})`;
-
-    /* ---------------- Render ---------------- */
-    return (
-        <>
-            {/* Marker */}
-            <svg width="0" height="0" style={{ position: "absolute" }}>
-                <defs>
-                    <marker
-                        id={markerId}
-                        markerWidth="12"
-                        markerHeight="12"
-                        viewBox="0 0 12 12"
-                        refX="10"
-                        refY="6"
-                        orient="auto"
-                        markerUnits="strokeWidth"
-                    >
-                        <path
-                            d="M 2 2 L 10 6 L 2 10 Z"
-                            fill="context-fill"
-                            stroke="context-stroke"
-                            strokeWidth="1"
-                            strokeLinejoin="round"
-                        />
-                    </marker>
-                </defs>
-            </svg>
-
-            {/* Edge visible (con ref para calcular punto medio real) */}
-            <path
-                ref={pathRef}
-                d={edgePath}
-                fill="none"
-                style={animatedStyle}
-                markerEnd={markerUrl}
-                className="edge-stroke-animated"
-            />
-
-            {/* Hit area */}
-            <path
-                d={edgePath}
-                fill="none"
-                stroke="transparent"
-                strokeWidth={18}
-                onMouseEnter={showTooltip}
-                onMouseLeave={hideTooltipDelayed}
-                onClick={toggleSticky}
-                style={{ cursor: "pointer" }}
-            />
-
-            {/* Tooltip Guardando */}
-            {isSaving && (
-                <foreignObject
-                    x={currentLabelX - 40}
-                    y={currentLabelY - 50}
-                    width={90}
-                    height={24}
-                >
-                    <div className="edge-saving-tooltip">Guardando…</div>
-                </foreignObject>
+            {data?.multicast && (
+              <div className="edge-tooltip__extra">Multicast: {data.multicast}</div>
             )}
 
-            {/* ✅ Tooltip en el CENTRO REAL del edge */}
-            {hover && (tooltipBody || data?.multicast) && (
-                <foreignObject
-                    x={tipPos.x - 130}
-                    y={tipPos.y - 90}
-                    width={260}
-                    height={150}
-                    style={{ overflow: "visible", pointerEvents: "none" }}
-                >
-                    <div
-                        className={`edge-tooltip ${
-                            sticky ? "edge-tooltip--sticky" : ""
-                        }`}
-                        style={{
-                            position: "relative",
-                            zIndex: 9999999, // 🔥 por encima de TODO
-                            pointerEvents: "auto",
-                        }}
-                        onMouseEnter={showTooltip}
-                        onMouseLeave={hideTooltipDelayed}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="edge-tooltip__title">
-                            {tooltipTitle}
-                            {sticky && (
-                                <span className="edge-tooltip__pin">📌</span>
-                            )}
-                        </div>
+            <div className="edge-tooltip__extra" style={{ opacity: 0.65 }}>
+              {sticky ? "Fijado (click para soltar)" : "Click para fijar"}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
-                        <div className="edge-tooltip__body">
-                            {tooltipBody || "Sin descripción"}
-                        </div>
+  return (
+    <>
+      {/* Marker único */}
+      <svg width="0" height="0" style={{ position: "absolute" }}>
+        <defs>
+          <marker
+            id={markerId}
+            markerWidth="12"
+            markerHeight="12"
+            viewBox="0 0 12 12"
+            refX="10"
+            refY="6"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path
+              d="M 2 2 L 10 6 L 2 10 Z"
+              fill="context-fill"
+              stroke="context-stroke"
+              strokeWidth="1"
+              strokeLinejoin="round"
+            />
+          </marker>
+        </defs>
+      </svg>
 
-                        {data?.multicast && (
-                            <div className="edge-tooltip__extra">
-                                Multicast: {data.multicast}
-                            </div>
-                        )}
-                    </div>
-                </foreignObject>
-            )}
-        </>
-    );
+      {/* Edge visible */}
+      <path
+        d={edgePath}
+        fill="none"
+        style={animatedStyle}
+        markerEnd={markerUrl}
+        className="edge-stroke-animated"
+      />
+
+      {/* Hover zone (invisible) */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={18}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltipDelayed}
+      />
+
+      {/* Tooltip guardando */}
+      {isSaving && (
+        <foreignObject
+          x={(currentLabelX ?? labelX) - 40}
+          y={(currentLabelY ?? labelY) - 50}
+          width={90}
+          height={24}
+          requiredExtensions="http://www.w3.org/1999/xhtml"
+        >
+          <div xmlns="http://www.w3.org/1999/xhtml" className="edge-saving-tooltip">
+            Guardando…
+          </div>
+        </foreignObject>
+      )}
+
+      {/* Tooltip principal (portal) */}
+      {tooltipPortal}
+    </>
+  );
 }
