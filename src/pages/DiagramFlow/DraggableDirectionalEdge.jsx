@@ -1,4 +1,3 @@
-// src/pages/ChannelDiagram/edges/DraggableDirectionalEdge.jsx
 import { getSmoothStepPath } from "@xyflow/react";
 import { useMemo, useState, useRef, useEffect } from "react";
 
@@ -51,32 +50,58 @@ export default function DraggableDirectionalEdge(props) {
   const tooltipBody =
     data?.tooltip || buildTooltipFromData(data);
 
-  /* ---------------- Hover estable ---------------- */
+  /* ---------------- Hover + Sticky ---------------- */
   const [hover, setHover] = useState(false);
+  const [sticky, setSticky] = useState(false);
   const hideTimerRef = useRef(null);
 
   const showTooltip = () => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     setHover(true);
   };
 
   const hideTooltipDelayed = () => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-    }
+    if (sticky) return;
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
       setHover(false);
-    }, 120); // delay clave anti-parpadeo
+    }, 120);
   };
+
+  const toggleSticky = (e) => {
+    e.stopPropagation();
+    setSticky((prev) => !prev);
+    setHover(true);
+  };
+
+  /* ---- cerrar sticky con ESC o click fuera ---- */
+  useEffect(() => {
+    if (!sticky) return;
+
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setSticky(false);
+        setHover(false);
+      }
+    };
+
+    const onClickOutside = () => {
+      setSticky(false);
+      setHover(false);
+    };
+
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("click", onClickOutside);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("click", onClickOutside);
+    };
+  }, [sticky]);
 
   useEffect(() => {
     return () => {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-      }
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
   }, []);
 
@@ -138,7 +163,7 @@ export default function DraggableDirectionalEdge(props) {
         className="edge-stroke-animated"
       />
 
-      {/* Hit area para hover */}
+      {/* Hit area */}
       <path
         d={edgePath}
         fill="none"
@@ -146,6 +171,8 @@ export default function DraggableDirectionalEdge(props) {
         strokeWidth={18}
         onMouseEnter={showTooltip}
         onMouseLeave={hideTooltipDelayed}
+        onClick={toggleSticky}
+        style={{ cursor: "pointer" }}
       />
 
       {/* Tooltip Guardando */}
@@ -156,51 +183,33 @@ export default function DraggableDirectionalEdge(props) {
           width={90}
           height={24}
         >
-          <div
-            style={{
-              padding: "4px 6px",
-              borderRadius: 6,
-              background: "rgba(13,110,253,0.85)",
-              color: "#fff",
-              fontSize: 11,
-              fontWeight: 600,
-              pointerEvents: "none",
-            }}
-          >
-            Guardando…
-          </div>
+          <div className="edge-saving-tooltip">Guardando…</div>
         </foreignObject>
       )}
 
-      {/* Tooltip estable */}
+      {/* Tooltip centrado + sticky */}
       {hover && (tooltipBody || data?.multicast) && (
         <foreignObject
-          x={currentLabelX + 10}
-          y={currentLabelY + 10}
+          x={currentLabelX - 130}
+          y={currentLabelY - 90}
           width={260}
-          height={140}
+          height={150}
         >
           <div
-            style={{
-              maxWidth: "fit-content",
-              padding: "8px 10px",
-              borderRadius: 8,
-              background: "rgba(0,0,0,0.85)",
-              color: "#fff",
-              fontSize: 12,
-              lineHeight: 1.3,
-              boxShadow: "0 6px 14px rgba(0,0,0,.3)",
-              pointerEvents: "auto",
-            }}
+            className={`edge-tooltip ${sticky ? "edge-tooltip--sticky" : ""}`}
             onMouseEnter={showTooltip}
             onMouseLeave={hideTooltipDelayed}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            <div className="edge-tooltip__title">
               {tooltipTitle}
+              {sticky && <span className="edge-tooltip__pin">📌</span>}
             </div>
-            <div>{tooltipBody || "Sin descripción"}</div>
+            <div className="edge-tooltip__body">
+              {tooltipBody || "Sin descripción"}
+            </div>
             {data?.multicast && (
-              <div style={{ marginTop: 6, opacity: 0.9 }}>
+              <div className="edge-tooltip__extra">
                 Multicast: {data.multicast}
               </div>
             )}
