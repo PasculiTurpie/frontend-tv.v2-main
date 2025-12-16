@@ -20,17 +20,14 @@
   font-size: 12px;
   line-height: 1.3;
   box-shadow: 0 10px 24px rgba(0,0,0,.25);
-  max-width: 260px;
 
-  /* ✅ clave: permite hover “real” (no parpadea) */
+  /* ✅ clave: el tooltip debe poder capturar el mouse para NO parpadear */
   pointer-events: auto;
-}
 
-/* ✅ Cuando el tooltip está renderizado en portal (body),
-      aseguramos capa máxima y positioning global */
-.edge-tooltip {
-  position: fixed;
-  z-index: 2147483647 !important;
+  /* ✅ ya no sirve "relative" dentro del SVG: el tooltip ahora irá en portal */
+  position: fixed;               /* ✅ necesario para top/left globales */
+  z-index: 2147483647 !important;/* ✅ máximo práctico */
+  max-width: 260px;
 }
 
 .edge-tooltip--sticky {
