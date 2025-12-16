@@ -53,3 +53,19 @@
   font-weight: 600;
   pointer-events: none;
 }
+.edge-tooltip {
+  position: relative;
+  z-index: 9999999 !important; /* 🔥 prioridad absoluta */
+}
+
+.react-flow__renderer {
+  z-index: 0;
+}
+
+.react-flow__edge-path {
+  z-index: 1;
+}
+
+.react-flow__node {
+  z-index: 2;
+}
