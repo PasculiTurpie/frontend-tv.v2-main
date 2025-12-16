@@ -1,6 +1,6 @@
 // src/pages/ChannelDiagram/edges/DraggableDirectionalEdge.jsx
 import { getSmoothStepPath } from "@xyflow/react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 import "./DraggableDirectionalEdge.css";
 import { getDirectionColor } from "./directionColors";
@@ -21,7 +21,7 @@ export default function DraggableDirectionalEdge(props) {
 
   const isSaving = Boolean(data?.isSaving);
 
-  // path con curva suave tipo "SmoothStep"
+  /* ---------------- Path ---------------- */
   const [edgePath, labelX, labelY] = useMemo(() => {
     return getSmoothStepPath({
       sourceX,
@@ -34,40 +34,55 @@ export default function DraggableDirectionalEdge(props) {
     });
   }, [sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition]);
 
-  /* ---------------------- label arrastrable ---------------------- */
   const currentLabelX = data?.labelPosition?.x ?? labelX;
   const currentLabelY = data?.labelPosition?.y ?? labelY;
 
+  /* ---------------- Tooltip content ---------------- */
   const buildTooltipFromData = (d) => {
     const start = d?.labelStart || d?.endpointLabels?.source || "";
     const end = d?.labelEnd || d?.endpointLabels?.target || "";
-
-    const hasStart = Boolean(start);
-    const hasEnd = Boolean(end);
-
-    if (hasStart && hasEnd) return `${start} → ${end}`;
-    if (hasStart || hasEnd) return start || end;
-    return "";
+    if (start && end) return `${start} → ${end}`;
+    return start || end || "";
   };
 
-  const tooltipTitle = data?.tooltipTitle ?? label ?? data?.label ?? id ?? "Etiqueta centro";
-  const tooltipBody = data?.tooltip || buildTooltipFromData(data);
+  const tooltipTitle =
+    data?.tooltipTitle ?? label ?? data?.label ?? id ?? "Etiqueta centro";
 
-  /* --------------------------- Tooltip --------------------------- */
+  const tooltipBody =
+    data?.tooltip || buildTooltipFromData(data);
+
+  /* ---------------- Hover estable ---------------- */
   const [hover, setHover] = useState(false);
-  const [mouse, setMouse] = useState({ x: labelX, y: labelY });
+  const hideTimerRef = useRef(null);
 
-  const onHoverMove = (e) => {
-    if (typeof e.nativeEvent.offsetX === "number") {
-      setMouse({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY });
+  const showTooltip = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
     }
+    setHover(true);
   };
 
-  /* --------------------------- Estilos --------------------------- */
+  const hideTooltipDelayed = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+    }
+    hideTimerRef.current = setTimeout(() => {
+      setHover(false);
+    }, 120); // delay clave anti-parpadeo
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, []);
+
+  /* ---------------- Estilos ---------------- */
   const direction = data?.direction ?? "ida";
 
-  // ✅ PRIORIDAD: color elegido por el usuario (guardado en data.color o style.stroke)
-  // fallback: color por dirección
   const chosenColor =
     data?.color ||
     style?.stroke ||
@@ -79,8 +94,7 @@ export default function DraggableDirectionalEdge(props) {
     ...style,
   };
 
-  /* -------------------- Marker heredando color -------------------- */
-  // ✅ id único por edge para evitar colisiones en el DOM
+  /* ---------------- Marker heredando color ---------------- */
   const markerId = useMemo(() => {
     const safe = String(id || "edge").replace(/[^a-zA-Z0-9_-]/g, "_");
     return `arrowclosed_${safe}`;
@@ -88,10 +102,10 @@ export default function DraggableDirectionalEdge(props) {
 
   const markerUrl = `url(#${markerId})`;
 
-  /* ----------------------- Render del Edge ----------------------- */
+  /* ---------------- Render ---------------- */
   return (
     <>
-      {/* ✅ Definición del marker: hereda stroke/fill desde el path usando context-stroke/fill */}
+      {/* Marker */}
       <svg width="0" height="0" style={{ position: "absolute" }}>
         <defs>
           <marker
@@ -104,10 +118,6 @@ export default function DraggableDirectionalEdge(props) {
             orient="auto"
             markerUnits="strokeWidth"
           >
-            {/* ArrowClosed:
-               - Usamos context-stroke/context-fill para heredar el color del edge
-               - strokeLinejoin redondea el “cierre” para que se vea más bonito
-            */}
             <path
               d="M 2 2 L 10 6 L 2 10 Z"
               fill="context-fill"
@@ -119,7 +129,7 @@ export default function DraggableDirectionalEdge(props) {
         </defs>
       </svg>
 
-      {/* Línea visible con animación + marker heredando color */}
+      {/* Edge visible */}
       <path
         d={edgePath}
         fill="none"
@@ -128,28 +138,25 @@ export default function DraggableDirectionalEdge(props) {
         className="edge-stroke-animated"
       />
 
-      {/* Path invisible que detecta hover */}
+      {/* Hit area para hover */}
       <path
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={16}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        onMouseMove={onHoverMove}
+        strokeWidth={18}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltipDelayed}
       />
 
-      {/* Tooltip "Guardando…" */}
+      {/* Tooltip Guardando */}
       {isSaving && (
         <foreignObject
-          x={(currentLabelX ?? labelX) - 40}
-          y={(currentLabelY ?? labelY) - 50}
+          x={currentLabelX - 40}
+          y={currentLabelY - 50}
           width={90}
           height={24}
-          requiredExtensions="http://www.w3.org/1999/xhtml"
         >
           <div
-            xmlns="http://www.w3.org/1999/xhtml"
             style={{
               padding: "4px 6px",
               borderRadius: 6,
@@ -165,30 +172,32 @@ export default function DraggableDirectionalEdge(props) {
         </foreignObject>
       )}
 
-      {/* Tooltip principal al hover */}
+      {/* Tooltip estable */}
       {hover && (tooltipBody || data?.multicast) && (
         <foreignObject
-          x={(mouse.x ?? labelX) + 10}
-          y={(mouse.y ?? labelY) + 10}
+          x={currentLabelX + 10}
+          y={currentLabelY + 10}
           width={260}
-          height={120}
-          requiredExtensions="http://www.w3.org/1999/xhtml"
+          height={140}
         >
           <div
-            xmlns="http://www.w3.org/1999/xhtml"
             style={{
               maxWidth: "fit-content",
               padding: "8px 10px",
               borderRadius: 8,
-              background: "rgba(0,0,0,0.8)",
+              background: "rgba(0,0,0,0.85)",
               color: "#fff",
               fontSize: 12,
               lineHeight: 1.3,
               boxShadow: "0 6px 14px rgba(0,0,0,.3)",
-              pointerEvents: "none",
+              pointerEvents: "auto",
             }}
+            onMouseEnter={showTooltip}
+            onMouseLeave={hideTooltipDelayed}
           >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>{tooltipTitle}</div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              {tooltipTitle}
+            </div>
             <div>{tooltipBody || "Sin descripción"}</div>
             {data?.multicast && (
               <div style={{ marginTop: 6, opacity: 0.9 }}>
