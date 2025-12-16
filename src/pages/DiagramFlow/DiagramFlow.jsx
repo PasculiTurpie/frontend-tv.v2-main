@@ -78,6 +78,7 @@ const inferEquipoTipo = (node = {}) => {
     node?.data?.tipo ??
     node?.data?.tipoNombre ??
     node?.type;
+
   if (!rawTipo) {
     if (
       node?.equipo?.irdRef ||
@@ -129,7 +130,8 @@ const normalizeEdges = (arr = []) =>
     const markerEnd = {
       ...(typeof e?.markerEnd === "object" && e?.markerEnd !== null ? e.markerEnd : {}),
       type: MarkerType.ArrowClosed,
-      color: getDirectionColor(direction),
+      // ✅ si el edge viene con color guardado, respetarlo; si no, usa getDirectionColor()
+      color: e?.data?.color || e?.style?.stroke || getDirectionColor(direction),
     };
 
     return {
@@ -441,7 +443,6 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
 
     // Si hay datos del equipo asociado desde irdRef, mostrarlos también
     if (equipoFromIrdRef && Object.keys(equipoFromIrdRef).length > 0) {
-      // Agregar separador visual
       pushDetail("━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━━━━━━━━━━━");
       pushHeading("Datos del equipo asociado");
 
@@ -589,40 +590,37 @@ const firstFreeHandle = (occupiedSet, kind, side, maxPerSide) => {
   return null;
 };
 
-/* ---------------- Helper para tooltip basado en puertos ---------------- */
+/* ---------------- Helper tooltip (unificado con ChannelForm: Origen/Destino) ---------------- */
 const buildTooltipFromEdge = (edge, sourceLabel, targetLabel) => {
   const data = edge?.data || {};
 
-  const labelStart =
-    data.labelStart ||
-    data.endpointLabels?.source ||
-    "";
-  const labelEnd =
-    data.labelEnd ||
-    data.endpointLabels?.target ||
-    "";
+  const labelStart = (data.labelStart || data.endpointLabels?.source || "").trim();
+  const labelEnd = (data.labelEnd || data.endpointLabels?.target || "").trim();
 
   const hasPorts = Boolean(labelStart || labelEnd);
 
+  // Arriba (título)
   const title =
     data.tooltipTitle ||
-    edge.label ||
-    data.label ||
+    edge?.label ||
+    data?.label ||
+    edge?.id ||
     "Etiqueta centro";
 
+  // Abajo (texto)
   let body = "";
-
   if (hasPorts) {
-    if (labelStart && labelEnd) {
-      body = `${labelStart} to ${labelEnd}`;
-    } else {
-      body = labelStart || labelEnd;
-    }
+    const parts = [];
+    if (labelStart) parts.push(`Origen: ${labelStart}`);
+    if (labelEnd) parts.push(`Destino: ${labelEnd}`);
+    body = parts.join(" | ");
   } else {
-    // Fallback: nombres de los nodos
-    const from = sourceLabel || edge.source || "";
-    const to = targetLabel || edge.target || "";
-    body = `${from} to ${to}`;
+    const from = (sourceLabel || edge?.source || "").trim();
+    const to = (targetLabel || edge?.target || "").trim();
+    const parts = [];
+    if (from) parts.push(`Origen: ${from}`);
+    if (to) parts.push(`Destino: ${to}`);
+    body = parts.join(" | ");
   }
 
   return {
@@ -1558,6 +1556,15 @@ export const DiagramFlow = () => {
       const sourceLabel = sNode?.data?.label ?? source;
       const targetLabel = tNode?.data?.label ?? target;
 
+      // ✅ NO guardamos nombres de nodos como "puertos"
+      // labelStart/labelEnd deben quedar para puertos reales
+      const baseForTooltip = {
+        data: { labelStart: "", labelEnd: "", tooltipTitle: "Etiqueta centro" },
+        label: undefined,
+        id: undefined,
+      };
+      const tooltipPayload = buildTooltipFromEdge(baseForTooltip, sourceLabel, targetLabel);
+
       const newEdge = {
         ...defaultEdgeOptions,
         id: `e-${source}-${target}-${Math.random().toString(36).slice(2)}`,
@@ -1567,10 +1574,10 @@ export const DiagramFlow = () => {
         targetHandle,
         data: {
           direction: "ida",
-          labelStart: sourceLabel,
-          labelEnd: targetLabel,
-          tooltipTitle: "Etiqueta centro",
-          tooltip: `${sourceLabel} to ${targetLabel}`,
+          labelStart: "",
+          labelEnd: "",
+          tooltipTitle: tooltipPayload.tooltipTitle,
+          tooltip: tooltipPayload.tooltip,
         },
       };
 
@@ -1688,7 +1695,7 @@ export const DiagramFlow = () => {
             targetHandle,
           };
 
-          // --- Tooltip: siempre desde labelStart/labelEnd si existen ---
+          // ✅ Tooltip unificado (Origen/Destino)
           tooltipPayload = buildTooltipFromEdge(edge, sourceLabel, targetLabel);
 
           return {
