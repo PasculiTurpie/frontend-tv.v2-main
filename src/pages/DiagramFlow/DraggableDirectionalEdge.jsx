@@ -1,4 +1,4 @@
-import { getSmoothStepPath, useStore } from "@xyflow/react";
+import { getSmoothStepPath } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 
@@ -22,7 +22,7 @@ export default function DraggableDirectionalEdge(props) {
   const isSaving = Boolean(data?.isSaving);
 
   // path con curva suave tipo "SmoothStep"
-  const [edgePath, labelX, labelY] = useMemo(() => {
+  const [edgePath] = useMemo(() => {
     return getSmoothStepPath({
       sourceX,
       sourceY,
@@ -34,10 +34,7 @@ export default function DraggableDirectionalEdge(props) {
     });
   }, [sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition]);
 
-  /* ---------------------- label arrastrable ---------------------- */
-  const currentLabelX = data?.labelPosition?.x ?? labelX;
-  const currentLabelY = data?.labelPosition?.y ?? labelY;
-
+  /* ---------------------- Tooltip content ---------------------- */
   const buildTooltipFromData = (d) => {
     const start = d?.labelStart || d?.endpointLabels?.source || "";
     const end = d?.labelEnd || d?.endpointLabels?.target || "";
@@ -55,8 +52,6 @@ export default function DraggableDirectionalEdge(props) {
 
   /* --------------------------- Color --------------------------- */
   const direction = data?.direction ?? "ida";
-
-  // ✅ PRIORIDAD: color elegido por el usuario (guardado en data.color o style.stroke)
   const chosenColor = data?.color || style?.stroke || getDirectionColor(direction);
 
   const animatedStyle = {
@@ -74,13 +69,12 @@ export default function DraggableDirectionalEdge(props) {
   const markerUrl = `url(#${markerId})`;
 
   /* --------------------------- Tooltip (Portal) --------------------------- */
-  // Transform del canvas (x,y,zoom) + domNode de ReactFlow
-  const transform = useStore((s) => s.transform); // [x, y, zoom]
-  const rfDomNode = useStore((s) => s.domNode); // contenedor del renderer
-
   const hideTimerRef = useRef(null);
   const [hover, setHover] = useState(false);
   const [sticky, setSticky] = useState(false);
+
+  // ✅ posición del tooltip en pantalla (clientX/clientY)
+  const [tipScreen, setTipScreen] = useState({ left: 0, top: 0 });
 
   const clearHideTimer = () => {
     if (hideTimerRef.current) {
@@ -89,61 +83,48 @@ export default function DraggableDirectionalEdge(props) {
     }
   };
 
-  const showTooltip = useCallback(() => {
+  const showTooltip = useCallback((evt) => {
     clearHideTimer();
     setHover(true);
+
+    // ✅ si viene evento (mouse), ancla al punto exacto sobre el edge
+    if (evt?.clientX != null && evt?.clientY != null) {
+      setTipScreen({ left: evt.clientX, top: evt.clientY });
+    }
   }, []);
 
   const hideTooltipDelayed = useCallback(() => {
     clearHideTimer();
     hideTimerRef.current = setTimeout(() => {
-      // ✅ anti-parpadeo + respeta sticky
       if (!sticky) setHover(false);
-    }, 240);
+    }, 120);
   }, [sticky]);
 
   useEffect(() => {
     return () => clearHideTimer();
   }, []);
 
-  // Tooltip en el CENTRO del edge (por defecto labelX/labelY)
-  const tipPos = useMemo(() => {
-    const x = Number.isFinite(currentLabelX) ? currentLabelX : labelX;
-    const y = Number.isFinite(currentLabelY) ? currentLabelY : labelY;
-    return { x, y };
-  }, [currentLabelX, currentLabelY, labelX, labelY]);
-
-  // Convertimos coords del canvas a coords de pantalla (para Portal fixed)
-  const screenPos = useMemo(() => {
-    const [tx, ty, zoom] = Array.isArray(transform) ? transform : [0, 0, 1];
-
-    // Si no está montado aún, devolvemos algo razonable
-    if (!rfDomNode || typeof rfDomNode.getBoundingClientRect !== "function") {
-      return { left: 0, top: 0, zoom: 1 };
-    }
-
-    const rect = rfDomNode.getBoundingClientRect();
-
-    // canvas(x,y) -> pantalla
-    const left = rect.left + tipPos.x * zoom + tx;
-    const top = rect.top + tipPos.y * zoom + ty;
-
-    return { left, top, zoom };
-  }, [transform, rfDomNode, tipPos.x, tipPos.y]);
+  // ✅ mientras no esté sticky, el tooltip sigue al mouse sobre el edge
+  const handleMouseMove = useCallback(
+    (evt) => {
+      if (sticky) return;
+      if (evt?.clientX == null || evt?.clientY == null) return;
+      setTipScreen({ left: evt.clientX, top: evt.clientY });
+    },
+    [sticky]
+  );
 
   const tooltipPortal =
     hover && (tooltipBody || data?.multicast)
       ? createPortal(
           <div
-            // ✅ usa tu CSS existente
             className={`edge-tooltip ${sticky ? "edge-tooltip--sticky" : ""}`}
             style={{
-              left: screenPos.left + 10,
-              top: screenPos.top + 10,
+              left: tipScreen.left + 10,
+              top: tipScreen.top + 10,
             }}
-            onMouseEnter={showTooltip}
+            onMouseEnter={(e) => showTooltip(e)}
             onMouseLeave={hideTooltipDelayed}
-            onMouseDown={(e) => e.stopPropagation()} // ✅ evita pane click / drag raros
             onClick={(e) => {
               e.stopPropagation();
               setSticky((v) => !v); // click = fija / libera
@@ -160,6 +141,10 @@ export default function DraggableDirectionalEdge(props) {
             {data?.multicast && (
               <div className="edge-tooltip__extra">Multicast: {data.multicast}</div>
             )}
+
+            <div className="edge-tooltip__extra" style={{ opacity: 0.75 }}>
+              {sticky ? "Fijado (click para soltar)" : "Click para fijar"}
+            </div>
           </div>,
           document.body
         )
@@ -201,36 +186,35 @@ export default function DraggableDirectionalEdge(props) {
         className="edge-stroke-animated"
       />
 
-      {/* Path invisible para hover */}
+      {/* ✅ Path invisible para hover + seguimiento del mouse */}
       <path
         d={edgePath}
         fill="none"
         stroke="transparent"
         strokeWidth={16}
         onMouseEnter={showTooltip}
+        onMouseMove={handleMouseMove}
         onMouseLeave={hideTooltipDelayed}
+        onClick={(e) => {
+          // ✅ click sobre el edge: fija / libera
+          e.stopPropagation();
+          showTooltip(e);
+          setSticky((v) => !v);
+        }}
       />
 
       {/* Tooltip "Guardando…" */}
       {isSaving && (
         <foreignObject
-          x={(currentLabelX ?? labelX) - 40}
-          y={(currentLabelY ?? labelY) - 50}
+          x={Math.min(sourceX, targetX) + Math.abs(targetX - sourceX) / 2 - 40}
+          y={Math.min(sourceY, targetY) + Math.abs(targetY - sourceY) / 2 - 50}
           width={90}
           height={24}
           requiredExtensions="http://www.w3.org/1999/xhtml"
         >
           <div
             xmlns="http://www.w3.org/1999/xhtml"
-            style={{
-              padding: "4px 6px",
-              borderRadius: 6,
-              background: "rgba(13,110,253,0.85)",
-              color: "#fff",
-              fontSize: 11,
-              fontWeight: 600,
-              pointerEvents: "none",
-            }}
+            className="edge-saving-tooltip"
           >
             Guardando…
           </div>
