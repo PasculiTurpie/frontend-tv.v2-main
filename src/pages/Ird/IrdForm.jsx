@@ -98,14 +98,30 @@ const IrdForm = () => {
               const resp = await api.createIrd(values);
               const data = resp?.data ?? resp;
 
-              // soporta backend que devuelva { ird, equipo } o solo ird
+              // soporta backend que devuelva { ird, equipo, equipoInfo } o solo ird
               const ird = data?.ird ?? data;
               const equipo = data?.equipo ?? null;
+              const equipoInfo = data?.equipoInfo ?? null;
 
-              const tipoEquipoNombre =
+              const tipoEquipoNombreRaw =
                 equipo?.tipoNombre?.tipoNombre ||
-                equipo?.tipoNombre?.tipoNombre?.toUpperCase?.() ||
+                equipo?.tipoNombre?.tipoNombreLower ||
+                equipoInfo?.tipoEquipo ||
                 null;
+
+              const tipoEquipoNombre = tipoEquipoNombreRaw
+                ? String(tipoEquipoNombreRaw).toUpperCase()
+                : "NO INFORMADO";
+
+              const equipoEstado = equipo
+                ? "Creado/Actualizado"
+                : equipoInfo?.created === false
+                ? "No creado"
+                : "No informado";
+
+              const motivoEquipo =
+                equipoInfo?.reason ||
+                (equipo ? "Equipo asociado creado automáticamente." : "");
 
               Swal.fire({
                 title: "IRD guardado",
@@ -117,10 +133,13 @@ const IrdForm = () => {
                     <div><b>Modelo:</b> ${values.modelIrd}</div>
                     <div><b>IP Gestión:</b> ${values.ipAdminIrd}</div>
                     <hr/>
-                    <div><b>Equipo:</b> ${equipo ? "Creado" : "No informado"}</div>
-                    <div><b>TipoEquipo:</b> ${
-                      tipoEquipoNombre ? String(tipoEquipoNombre).toUpperCase() : "No informado"
-                    }</div>
+                    <div><b>Equipo:</b> ${equipoEstado}</div>
+                    <div><b>TipoEquipo:</b> ${tipoEquipoNombre}</div>
+                    ${
+                      motivoEquipo
+                        ? `<div style="margin-top:6px;"><b>Detalle:</b> ${motivoEquipo}</div>`
+                        : ""
+                    }
                     ${
                       ird?._id
                         ? `<div style="margin-top:8px;"><b>IRD _id:</b> ${ird._id}</div>`
@@ -355,7 +374,10 @@ const IrdForm = () => {
                 {/* COLUMNA 3 */}
                 <div className={styles.columns__group}>
                   <div className="form__group">
-                    <label htmlFor="modulationReceptorIrd" className="form__group-label">
+                    <label
+                      htmlFor="modulationReceptorIrd"
+                      className="form__group-label"
+                    >
                       Modulación
                       <br />
                       <Field
@@ -365,8 +387,11 @@ const IrdForm = () => {
                         name="modulationReceptorIrd"
                       />
                     </label>
-                    {errors.modulationReceptorIrd && touched.modulationReceptorIrd ? (
-                      <div className="form__group-error">{errors.modulationReceptorIrd}</div>
+                    {errors.modulationReceptorIrd &&
+                    touched.modulationReceptorIrd ? (
+                      <div className="form__group-error">
+                        {errors.modulationReceptorIrd}
+                      </div>
                     ) : null}
                   </div>
 
@@ -403,7 +428,10 @@ const IrdForm = () => {
                   </div>
 
                   <div className="form__group">
-                    <label htmlFor="cvirtualReceptor" className="form__group-label">
+                    <label
+                      htmlFor="cvirtualReceptor"
+                      className="form__group-label"
+                    >
                       Canal Virtual
                       <br />
                       <Field
@@ -470,7 +498,10 @@ const IrdForm = () => {
                   </div>
 
                   <div className="form__group">
-                    <label htmlFor="multicastReceptor" className="form__group-label">
+                    <label
+                      htmlFor="multicastReceptor"
+                      className="form__group-label"
+                    >
                       Multicast Receptor
                       <br />
                       <Field
@@ -486,7 +517,10 @@ const IrdForm = () => {
                   </div>
 
                   <div className="form__group">
-                    <label htmlFor="ipVideoMulticast" className="form__group-label">
+                    <label
+                      htmlFor="ipVideoMulticast"
+                      className="form__group-label"
+                    >
                       Ip Video Multicast
                       <br />
                       <Field
@@ -535,7 +569,11 @@ const IrdForm = () => {
                 </div>
               </div>
 
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isSubmitting}
+              >
                 {isSubmitting ? "Guardando..." : "Enviar"}
               </button>
             </Form>
