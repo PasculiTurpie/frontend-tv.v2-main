@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import api from "../../utils/api";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
@@ -11,29 +11,38 @@ const UpdateSchemaEquipo = Yup.object().shape({
   nombre: Yup.string().trim().required("Nombre requerido"),
   marca: Yup.string().trim().required("Marca requerida"),
   modelo: Yup.string().trim().required("Modelo requerido"),
-  tipoNombre: Yup.string().trim().required("Tipo requerido"),
-  ip_gestion: Yup.string().trim().matches(ipGestionRegex, "Debe ser una IP válida").required("IP requerida"),
+  tipoNombre: Yup.string().trim().required("Tipo requerido"), // aquí viaja el _id
+  ip_gestion: Yup.string()
+    .trim()
+    .matches(ipGestionRegex, "Debe ser una IP válida")
+    .required("IP requerida"),
 });
 
-const ModalEquipment = ({
-  itemId,
-  modalOpen,
-  setModalOpen,
-  title,
-  refreshList,
-}) => {
+const ModalEquipment = ({ itemId, modalOpen, setModalOpen, title, refreshList }) => {
   const [dataEquipos, setDataEquipos] = useState(null);
   const [tiposEquipo, setTiposEquipo] = useState([]);
 
   useEffect(() => {
-    if (itemId) {
-      api.getIdEquipo(itemId).then((res) => {
-        setDataEquipos(res.data);
-      });
-    }
-    api.getTipoEquipo().then((res) => {
-      setTiposEquipo(res.data);
-    });
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        if (itemId) {
+          const resEquipo = await api.getIdEquipo(itemId);
+          if (mounted) setDataEquipos(resEquipo.data);
+        }
+
+        const resTipos = await api.getTipoEquipo();
+        if (mounted) setTiposEquipo(resTipos.data || []);
+      } catch (err) {
+        console.error("Error cargando modal equipo:", err);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
   }, [itemId]);
 
   if (!dataEquipos) return null;
@@ -45,20 +54,23 @@ const ModalEquipment = ({
         nombre: dataEquipos.nombre || "",
         marca: dataEquipos.marca || "",
         modelo: dataEquipos.modelo || "",
-        tipoNombre: dataEquipos?.tipoNombre?.tipoNombre?.toUpperCase() || "",
+        // ✅ FIX: usar el _id del tipo
+        tipoNombre: dataEquipos?.tipoNombre?._id || "",
         ip_gestion: dataEquipos.ip_gestion || "",
       }}
       validationSchema={UpdateSchemaEquipo}
       onSubmit={async (values, { resetForm }) => {
         try {
           await api.updateEquipo(itemId, values);
+
           Swal.fire({
             icon: "success",
             title: "Equipo actualizado",
             text: "El equipo se ha actualizado exitosamente!",
             footer: `<h4>${values.nombre}</h4><h4>${values.ip_gestion}</h4>`,
           });
-          refreshList();
+
+          refreshList?.();
           setModalOpen(false);
           resetForm();
         } catch (error) {
@@ -84,6 +96,7 @@ const ModalEquipment = ({
                   </label>
                   <ErrorMessage name="nombre" component="div" className="form__group-error" />
                 </div>
+
                 <div className="form__group">
                   <label htmlFor="marca" className="form__group-label">
                     Marca
@@ -92,6 +105,7 @@ const ModalEquipment = ({
                   </label>
                   <ErrorMessage name="marca" component="div" className="form__group-error" />
                 </div>
+
                 <div className="form__group">
                   <label htmlFor="modelo" className="form__group-label">
                     Modelo
@@ -110,8 +124,8 @@ const ModalEquipment = ({
                     <Field as="select" className="form__group-input" name="tipoNombre">
                       <option value="">Seleccione tipo</option>
                       {tiposEquipo?.map((tipo) => (
-                        <option key={tipo._id} value={tipo._id}>
-                          {tipo.tipoNombre.toUpperCase()}
+                        <option key={tipo._id || tipo.id} value={tipo._id || tipo.id}>
+                          {(tipo.tipoNombre || "").toUpperCase()}
                         </option>
                       ))}
                     </Field>
@@ -129,6 +143,7 @@ const ModalEquipment = ({
                 </div>
               </div>
             </div>
+
             <button type="submit" className="button btn-primary">
               Enviar
             </button>
