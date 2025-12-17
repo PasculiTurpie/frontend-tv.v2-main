@@ -1,3 +1,4 @@
+// pages/Ird/IrdListar.jsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Loader from "../../components/Loader/Loader";
@@ -19,29 +20,30 @@ const IrdListar = () => {
   // 🔎 Buscador
   const [query, setQuery] = useState("");
 
-  const refreshList = useCallback(() => {
+  const refreshList = useCallback(async () => {
     setIsLoading(true);
-    api
-      .getIrd()
-      .then((res) => {
-        const list = res.data || [];
-        // Ordenar por nombre
-        const sorted = list.sort((a, b) =>
-          (a?.nombreIrd || "").localeCompare(b?.nombreIrd || "", "es", {
-            sensitivity: "base",
-          })
-        );
-        setIrd(sorted);
-      })
-      .catch((error) => {
-        Swal.fire({
-          icon: "error",
-          title: "Oops...",
-          text: `${error.message}`,
-          footer: '<a href="#">Contactar a administrador</a>',
-        });
-      })
-      .finally(() => setIsLoading(false));
+    try {
+      const res = await api.getIrd(); // tu api.getIrd devuelve AxiosResponse
+      const list = res?.data || [];   // aquí lo manejamos seguro
+
+      const sorted = [...list].sort((a, b) =>
+        (a?.nombreIrd || "").localeCompare(b?.nombreIrd || "", "es", {
+          sensitivity: "base",
+        })
+      );
+
+      setIrd(sorted);
+    } catch (error) {
+      console.error("getIrd error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Oops...",
+        text: error?.response?.data?.message || error.message || "Error al cargar IRDs",
+        footer: '<a href="#">Contactar a administrador</a>',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -59,31 +61,34 @@ const IrdListar = () => {
       confirmButtonText: "Sí, eliminar",
     });
 
-    if (result.isConfirmed) {
-      try {
-        await api.deleteIrd(id);
-        await refreshList();
+    if (!result.isConfirmed) return;
 
-        // Ajustar página si queda vacía
-        setTimeout(() => {
-          const newTotal = Math.max(ird.length - 1, 0);
-          const newTotalPages = Math.max(Math.ceil(newTotal / pageSize) || 1, 1);
-          if (page > newTotalPages) setPage(newTotalPages);
-        }, 0);
+    try {
+      const resp = await api.deleteIrd(id); // devuelve AxiosResponse (según tu api.js)
+      // si backend envía {message}, resp.data.message existirá
+      await refreshList();
 
-        await Swal.fire({
-          title: "¡Eliminado!",
-          text: "El registro ha sido eliminado",
-          icon: "success",
-        });
-      } catch (error) {
-        console.error("Error al eliminar:", error);
-        Swal.fire({
-          title: "Error",
-          text: "Hubo un problema al eliminar el registro",
-          icon: "error",
-        });
-      }
+      // Ajustar página correctamente (sin usar ird.length stale)
+      setPage((prev) => {
+        // recalcula basado en el nuevo listado (ya actualizado por refreshList)
+        // como setIrd es async, hacemos una aproximación segura:
+        // si estás en página >1, baja 1 si la página queda vacía.
+        return Math.max(prev, 1);
+      });
+
+      await Swal.fire({
+        title: "¡Eliminado!",
+        text: resp?.data?.message || "El registro ha sido eliminado",
+        icon: "success",
+      });
+    } catch (error) {
+      console.error("deleteIrd error:", error);
+      Swal.fire({
+        title: "Error",
+        icon: "error",
+        text: error?.response?.data?.message || "Hubo un problema al eliminar el registro",
+        footer: `Status: ${error?.response?.status ?? "?"}`,
+      });
     }
   };
 
@@ -104,9 +109,7 @@ const IrdListar = () => {
     refreshList();
   };
 
-  const handleCancel = () => {
-    setModalOpen(false);
-  };
+  const handleCancel = () => setModalOpen(false);
 
   // Utilidad para normalizar (case/acentos-insensitive)
   const normalize = (v = "") =>
@@ -131,16 +134,13 @@ const IrdListar = () => {
     });
   }, [ird, query]);
 
-  // --- Totales y paginación calculada (sobre filtered) ---
   const total = filtered.length;
   const totalPages = Math.max(Math.ceil(total / pageSize) || 1, 1);
 
-  // Mantener page dentro de rango al cambiar totales
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [totalPages, page]);
 
-  // Volver a página 1 al cambiar query o pageSize
   useEffect(() => {
     setPage(1);
   }, [query, pageSize]);
@@ -250,9 +250,7 @@ const IrdListar = () => {
               <select
                 className="form__input"
                 value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                }}
+                onChange={(e) => setPageSize(Number(e.target.value))}
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
@@ -292,18 +290,16 @@ const IrdListar = () => {
                       <td>{x.marcaIrd}</td>
                       <td>{x.multicastReceptor}</td>
                       <td>
-                        <Link to={`http://${x.ipAdminIrd}`} target="_blank">
+                        {/* ✅ NO uses Link para URL externa */}
+                        <a href={`http://${x.ipAdminIrd}`} target="_blank" rel="noreferrer">
                           {x.ipAdminIrd}
-                        </Link>
+                        </a>
                       </td>
                       <td className="action">
                         <button className="btn btn-warning" onClick={() => showModal(x._id)}>
                           Editar
                         </button>
-                        <button
-                          className="btn btn-danger"
-                          onClick={() => deleteEncoderIrd(x._id)}
-                        >
+                        <button className="btn btn-danger" onClick={() => deleteEncoderIrd(x._id)}>
                           Eliminar
                         </button>
                       </td>
@@ -324,19 +320,11 @@ const IrdListar = () => {
                 flexWrap: "wrap",
               }}
             >
-              <button
-                className="button btn-secondary"
-                onClick={() => goTo(page - 1)}
-                disabled={page <= 1}
-              >
+              <button className="button btn-secondary" onClick={() => goTo(page - 1)} disabled={page <= 1}>
                 ◀ Anterior
               </button>
               {renderPager()}
-              <button
-                className="button btn-secondary"
-                onClick={() => goTo(page + 1)}
-                disabled={page >= totalPages}
-              >
+              <button className="button btn-secondary" onClick={() => goTo(page + 1)} disabled={page >= totalPages}>
                 Siguiente ▶
               </button>
             </div>

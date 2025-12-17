@@ -37,9 +37,7 @@ const DEFAULT_IRD_VALUES = {
   ipVideoMulticast: "",
   locationRow: "",
   locationCol: "",
-
-  // NUEVO: control del comportamiento post-actualización
-  recreateEquipo: true,
+  recreateEquipo: false, // ✅ por defecto OFF mientras no exista ruta en backend
 };
 
 const FIELD_GROUPS = [
@@ -76,42 +74,24 @@ const FIELD_GROUPS = [
 ];
 
 const UpdateIrdSchema = Yup.object().shape({
-  urlIrd: Yup.string().matches(
+  urlIrd: Yup.string().nullable().matches(
     /(?:https?:\/\/\w+\.\w+\.\w+.+)/,
     "Ingresa una url válida"
   ),
-  ipAdminIrd: Yup.string().matches(
+  ipAdminIrd: Yup.string().nullable().matches(
     /^172\.19\.\d{1,3}\.\d{1,3}$/,
     "Ingresa una ip válida"
   ),
-  nombreIrd: Yup.string(),
-  marcaIrd: Yup.string(),
-  modelIrd: Yup.string(),
-  versionIrd: Yup.string(),
-  uaIrd: Yup.string(),
-  tidReceptor: Yup.string(),
-  typeReceptor: Yup.string(),
-  feqReceptor: Yup.string(),
-  symbolRateIrd: Yup.string(),
-  fecReceptorIrd: Yup.string(),
-  modulationReceptorIrd: Yup.string(),
-  rellOfReceptor: Yup.string(),
-  nidReceptor: Yup.string(),
-  cvirtualReceptor: Yup.string(),
-  vctReceptor: Yup.string(),
-  outputReceptor: Yup.string(),
-  swAdmin: Yup.string(),
-  portSw: Yup.string(),
-  multicastReceptor: Yup.string().matches(
+  multicastReceptor: Yup.string().nullable().matches(
     ipMulticastRegex,
     "Debe ser una multicast válida"
   ),
-  ipVideoMulticast: Yup.string().matches(
+  ipVideoMulticast: Yup.string().nullable().matches(
     ipVideoMulticast,
     "Debe ser una ip válida"
   ),
-  locationRow: Yup.string().matches(/\d+/, "Ingrese un número"),
-  locationCol: Yup.string().matches(/\d+/, "Ingrese un número"),
+  locationRow: Yup.string().nullable().matches(/\d+/, "Ingrese un número"),
+  locationCol: Yup.string().nullable().matches(/\d+/, "Ingrese un número"),
   recreateEquipo: Yup.boolean(),
 });
 
@@ -135,18 +115,20 @@ const ModalIrd = ({ itemId, modalOpen, setModalOpen, title, refreshList }) => {
 
     const fetchData = async () => {
       setLoading(true);
-
       try {
-        const { data } = await api.getIdIrd(itemId);
+        const res = await api.getIdIrd(itemId); // AxiosResponse
         if (!active) return;
-        setDataIrd(data ?? DEFAULT_IRD_VALUES);
+
+        const data = res?.data ?? DEFAULT_IRD_VALUES;
+        setDataIrd(data);
       } catch (error) {
         if (!active) return;
         console.error("Error al obtener IRD:", error);
         Swal.fire({
           icon: "error",
           title: "Ups!!",
-          text: `${error.response?.data?.message || "Error desconocido"}`,
+          text: error?.response?.data?.message || error.message || "Error desconocido",
+          footer: `Status: ${error?.response?.status ?? "?"}`,
         });
         setDataIrd(DEFAULT_IRD_VALUES);
       } finally {
@@ -171,27 +153,29 @@ const ModalIrd = ({ itemId, modalOpen, setModalOpen, title, refreshList }) => {
         Swal.fire({
           icon: "error",
           title: "Ups!!",
-          text: "No se encontró el identificador del equipo",
+          text: "No se encontró el identificador del IRD",
         });
         setSubmitting(false);
         return;
       }
 
       try {
-        // 1) Actualiza el IRD
-        await api.updateIrd(itemId, values);
+        // ✅ Actualiza IRD (si falla, te mostraremos el error real)
+        const updated = await api.updateIrd(itemId, values);
 
         let equipoMsg = "";
-        // 2) Si corresponde, recrea/sincroniza el Equipo vinculado a partir del IRD
+
+        // ⚠️ Solo intenta recrear equipo si realmente existe esa ruta en backend
+        // (si no existe, te va a dar 404 siempre)
         if (values.recreateEquipo) {
           try {
-            // Endpoint sugerido: POST /irds/:id/recreate-equipo
             await api.recreateEquipoFromIrd(itemId);
             equipoMsg = "<p>Equipo vinculado recreado correctamente.</p>";
           } catch (eqErr) {
             console.error("Error al recrear el Equipo desde IRD:", eqErr);
             equipoMsg =
-              "<p><strong>Advertencia:</strong> El IRD se actualizó, pero no se pudo recrear el Equipo. Revisa los logs.</p>";
+              `<p><strong>Advertencia:</strong> IRD actualizado, pero no se pudo recrear el Equipo. ` +
+              `(${eqErr?.response?.status ?? "?"} ${eqErr?.response?.data?.message ?? ""})</p>`;
           }
         }
 
@@ -208,14 +192,15 @@ const ModalIrd = ({ itemId, modalOpen, setModalOpen, title, refreshList }) => {
 
         refreshList?.();
         setModalOpen(false);
-        resetForm({ values });
+        resetForm({ values: { ...values, ...(updated?.ird ?? updated ?? {}) } });
       } catch (error) {
+        console.error("updateIrd error:", error);
         Swal.fire({
           icon: "error",
-          title: "Ups!!",
-          text: `${error.response?.data?.message || "Error desconocido"}`,
+          title: "Error al actualizar",
+          text: error?.response?.data?.message || error.message || "Error desconocido",
+          footer: `Status: ${error?.response?.status ?? "?"}`,
         });
-        console.error(error);
       } finally {
         setSubmitting(false);
       }
@@ -239,9 +224,7 @@ const ModalIrd = ({ itemId, modalOpen, setModalOpen, title, refreshList }) => {
             placeholder={field.placeholder ?? field.label}
           />
         </label>
-        {error && isTouched ? (
-          <div className="form__group-error">{error}</div>
-        ) : null}
+        {error && isTouched ? <div className="form__group-error">{error}</div> : null}
       </div>
     );
   };
@@ -253,12 +236,8 @@ const ModalIrd = ({ itemId, modalOpen, setModalOpen, title, refreshList }) => {
       validationSchema={UpdateIrdSchema}
       onSubmit={handleSubmit}
     >
-      {({ errors, touched, isSubmitting, values }) => (
-        <ModalComponent
-          modalOpen={modalOpen}
-          title={title}
-          setModalOpen={setModalOpen}
-        >
+      {({ errors, touched, isSubmitting }) => (
+        <ModalComponent modalOpen={modalOpen} title={title} setModalOpen={setModalOpen}>
           {loading ? (
             <div className="modal__body-loading" aria-live="polite">
               <span className="loader" aria-hidden="true" />
@@ -268,24 +247,21 @@ const ModalIrd = ({ itemId, modalOpen, setModalOpen, title, refreshList }) => {
             <Form className={`form__add ${stylesIrd.formGrid}`} noValidate>
               <div className={stylesIrd.rows__group}>
                 {FIELD_GROUPS.map((group, groupIndex) => (
-                  <div
-                    className={stylesIrd.columns__group}
-                    key={`group-${groupIndex}`}
-                  >
+                  <div className={stylesIrd.columns__group} key={`group-${groupIndex}`}>
                     {group.map((field) => renderField(field, errors, touched))}
                   </div>
                 ))}
               </div>
 
-              {/* NUEVO: opción de recrear equipo vinculado */}
+              {/* ✅ SOLO habilítalo si tu backend ya tiene /irds/:id/recreate-equipo */}
               <div className="form__group" style={{ marginTop: "0.75rem" }}>
-                <label htmlFor="recreateEquipo" className="form__group-label" style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
-                  <Field
-                    id="recreateEquipo"
-                    name="recreateEquipo"
-                    type="checkbox"
-                  />
-                  Recrear equipo vinculado después de guardar
+                <label
+                  htmlFor="recreateEquipo"
+                  className="form__group-label"
+                  style={{ display: "flex", alignItems: "center", gap: ".5rem" }}
+                >
+                  <Field id="recreateEquipo" name="recreateEquipo" type="checkbox" />
+                  Recrear equipo vinculado después de guardar (requiere endpoint)
                 </label>
               </div>
 
