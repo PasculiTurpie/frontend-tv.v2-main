@@ -14,7 +14,8 @@ const getStatusClassName = (message) => {
   return "diagram-sidebar__status";
 };
 
-const ipRegex = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const ipRegex =
+  /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 
 const hasHttpProtocol = (value) => /^https?:\/\//i.test(value);
 
@@ -109,17 +110,17 @@ const NodeDetailSidebar = ({ isOpen, detail, loading, message, onClose }) => {
 
           {detail?.image ? (
             <div className="diagram-sidebar__image">
-              <img
-                src={detail.image}
-                alt={`Imagen del equipo ${detailTitle}`}
-              />
+              <img src={detail.image} alt={`Imagen del equipo ${detailTitle}`} />
             </div>
           ) : null}
 
           {detailItems.length ? (
             <dl className="diagram-sidebar__list">
               {detailItems.map((item, index) => (
-                <div key={`${item?.label ?? "detalle"}-${index}`} className="diagram-sidebar__list-item">
+                <div
+                  key={`${item?.label ?? "detalle"}-${index}`}
+                  className="diagram-sidebar__list-item"
+                >
                   <dt>{item?.label}</dt>
                   <dd>{renderDetailValue(item)}</dd>
                 </div>

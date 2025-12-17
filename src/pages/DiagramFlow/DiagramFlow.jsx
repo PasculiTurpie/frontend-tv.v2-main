@@ -21,7 +21,7 @@ import {
   prepareOptimisticUpdate,
 } from "../../utils/asyncUtils";
 import ErrorBoundary from "../../components/ErrorBoundary";
-import { HANDLE_CONFIG, makeHandleId, parseHandleId } from "../../config/handles.config";
+import { HANDLE_CONFIG, makeHandleId } from "../../config/handles.config";
 
 // Componentes personalizados
 import CustomNode from "./CustomNode";
@@ -48,7 +48,7 @@ const EQUIPO_TYPE_IMAGE_MAP = {
   satelite: "https://i.ibb.co/23VpLD2N/satelite.jpg",
   rtes: "https://i.ibb.co/VcfxF9hz/rtes.jpg",
   dcm: "https://i.ibb.co/VcfxF9hz/rtes.jpg",
-  mpls:"https://i.ibb.co/0yLDm0vQ/Chat-GPT-Image-17-dic-2025-08-06-30.png"
+  mpls: "https://i.ibb.co/0yLDm0vQ/Chat-GPT-Image-17-dic-2025-08-06-30.png",
 };
 
 const nodeTypes = { imageNode: CustomNode };
@@ -81,11 +81,7 @@ const inferEquipoTipo = (node = {}) => {
     node?.type;
 
   if (!rawTipo) {
-    if (
-      node?.equipo?.irdRef ||
-      node?.data?.equipo?.irdRef ||
-      node?.data?.irdRef
-    ) {
+    if (node?.equipo?.irdRef || node?.data?.equipo?.irdRef || node?.data?.irdRef) {
       return "ird";
     }
     return "";
@@ -131,7 +127,6 @@ const normalizeEdges = (arr = []) =>
     const markerEnd = {
       ...(typeof e?.markerEnd === "object" && e?.markerEnd !== null ? e.markerEnd : {}),
       type: MarkerType.ArrowClosed,
-      // ✅ si el edge viene con color guardado, respetarlo; si no, usa getDirectionColor()
       color: e?.data?.color || e?.style?.stroke || getDirectionColor(direction),
     };
 
@@ -232,7 +227,6 @@ const getNodeIrdData = (node) => {
       return candidate;
     }
   }
-
   return null;
 };
 
@@ -257,24 +251,27 @@ const extractIdentifier = (value, priorityKeys = []) => {
   }
 
   if (typeof value === "object") {
-    const keysToCheck = priorityKeys.length > 0 ? priorityKeys : [
-      "_id",
-      "id",
-      "value",
-      "key",
-      "equipoId",
-      "equipoID",
-      "equipo",
-      "idEquipo",
-      "id_equipo",
-      "irdId",
-      "irdID",
-      "ird",
-      "idIrd",
-      "id_ird",
-      "codigo",
-      "code",
-    ];
+    const keysToCheck =
+      priorityKeys.length > 0
+        ? priorityKeys
+        : [
+            "_id",
+            "id",
+            "value",
+            "key",
+            "equipoId",
+            "equipoID",
+            "equipo",
+            "idEquipo",
+            "id_equipo",
+            "irdId",
+            "irdID",
+            "ird",
+            "idIrd",
+            "id_ird",
+            "codigo",
+            "code",
+          ];
 
     for (const key of keysToCheck) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
@@ -370,7 +367,6 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
       ? sourceData
       : {};
 
-  // Si hay datos del equipo desde irdRef, combinarlos con los datos del nodo
   const equipoFromIrdRef =
     sourceData?.equipoDetails && typeof sourceData.equipoDetails === "object"
       ? sourceData.equipoDetails
@@ -442,7 +438,6 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
       pushDetail(formatKeyLabel(key), value);
     });
 
-    // Si hay datos del equipo asociado desde irdRef, mostrarlos también
     if (equipoFromIrdRef && Object.keys(equipoFromIrdRef).length > 0) {
       pushDetail("━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━━━━━━━━━━━");
       pushHeading("Datos del equipo asociado");
@@ -457,29 +452,20 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
       pushDetail("Tipo de equipo", tipo);
       pushDetail(
         "IP de gestión",
-        equipoFromIrdRef?.ip_gestion ??
-          equipoFromIrdRef?.ipGestion ??
-          equipoFromIrdRef?.ip
+        equipoFromIrdRef?.ip_gestion ?? equipoFromIrdRef?.ipGestion ?? equipoFromIrdRef?.ip
       );
       pushDetail("Marca", equipoFromIrdRef?.marca ?? equipoFromIrdRef?.brand);
       pushDetail("Modelo", equipoFromIrdRef?.modelo ?? equipoFromIrdRef?.model);
       pushDetail("N° de serie", equipoFromIrdRef?.serie ?? equipoFromIrdRef?.serial);
       pushDetail("Ubicación", equipoFromIrdRef?.ubicacion ?? equipoFromIrdRef?.location);
       pushDetail("Estado", equipoFromIrdRef?.estado ?? equipoFromIrdRef?.status);
-      pushDetail(
-        "Descripción",
-        equipoFromIrdRef?.descripcion ?? equipoFromIrdRef?.description
-      );
+      pushDetail("Descripción", equipoFromIrdRef?.descripcion ?? equipoFromIrdRef?.description);
 
-      const parametros =
-        equipoFromIrdRef?.parametros ?? equipoFromIrdRef?.parameters ?? null;
+      const parametros = equipoFromIrdRef?.parametros ?? equipoFromIrdRef?.parameters ?? null;
 
       if (Array.isArray(parametros)) {
         parametros
-          .filter(
-            (param) =>
-              param && (param.nombre || param.name) && (param.valor ?? param.value)
-          )
+          .filter((param) => param && (param.nombre || param.name) && (param.valor ?? param.value))
           .forEach((param) => {
             const label = param.nombre ?? param.name;
             const value = param.valor ?? param.value;
@@ -503,29 +489,19 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
 
     pushDetail("Nombre", mergedEquipo?.nombre ?? fallbackLabel);
     pushDetail("Tipo de equipo", tipo);
-    pushDetail(
-      "IP de gestión",
-      mergedEquipo?.ip_gestion ?? mergedEquipo?.ipGestion ?? mergedEquipo?.ip
-    );
+    pushDetail("IP de gestión", mergedEquipo?.ip_gestion ?? mergedEquipo?.ipGestion ?? mergedEquipo?.ip);
     pushDetail("Marca", mergedEquipo?.marca ?? mergedEquipo?.brand);
     pushDetail("Modelo", mergedEquipo?.modelo ?? mergedEquipo?.model);
     pushDetail("N° de serie", mergedEquipo?.serie ?? mergedEquipo?.serial);
     pushDetail("Ubicación", mergedEquipo?.ubicacion ?? mergedEquipo?.location);
     pushDetail("Estado", mergedEquipo?.estado ?? mergedEquipo?.status);
-    pushDetail(
-      "Descripción",
-      mergedEquipo?.descripcion ?? mergedEquipo?.description
-    );
+    pushDetail("Descripción", mergedEquipo?.descripcion ?? mergedEquipo?.description);
 
-    const parametros =
-      mergedEquipo?.parametros ?? mergedEquipo?.parameters ?? null;
+    const parametros = mergedEquipo?.parametros ?? mergedEquipo?.parameters ?? null;
 
     if (Array.isArray(parametros)) {
       parametros
-        .filter(
-          (param) =>
-            param && (param.nombre || param.name) && (param.valor ?? param.value)
-        )
+        .filter((param) => param && (param.nombre || param.name) && (param.valor ?? param.value))
         .forEach((param) => {
           const label = param.nombre ?? param.name;
           const value = param.valor ?? param.value;
@@ -538,10 +514,7 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
     }
   }
 
-  if (
-    node?.position &&
-    (typeof node.position.x === "number" || typeof node.position.y === "number")
-  ) {
+  if (node?.position && (typeof node.position.x === "number" || typeof node.position.y === "number")) {
     const x = Number.isFinite(node.position.x) ? Math.round(node.position.x) : node.position.x;
     const y = Number.isFinite(node.position.y) ? Math.round(node.position.y) : node.position.y;
     pushDetail("Posición", `${x}, ${y}`);
@@ -600,15 +573,8 @@ const buildTooltipFromEdge = (edge, sourceLabel, targetLabel) => {
 
   const hasPorts = Boolean(labelStart || labelEnd);
 
-  // Arriba (título)
-  const title =
-    data.tooltipTitle ||
-    edge?.label ||
-    data?.label ||
-    edge?.id ||
-    "Etiqueta centro";
+  const title = data.tooltipTitle || edge?.label || data?.label || edge?.id || "Etiqueta centro";
 
-  // Abajo (texto)
   let body = "";
   if (hasPorts) {
     const parts = [];
@@ -624,10 +590,7 @@ const buildTooltipFromEdge = (edge, sourceLabel, targetLabel) => {
     body = parts.join(" | ");
   }
 
-  return {
-    tooltipTitle: title,
-    tooltip: body,
-  };
+  return { tooltipTitle: title, tooltip: body };
 };
 
 /* ============================== Componente ============================== */
@@ -651,9 +614,8 @@ export const DiagramFlow = () => {
   const edgeLocksRef = useRef(new Map());
   const edgeRollbackRef = useRef(new Map());
 
-  // Estado de conexión y cola offline
   const { isOnline, wasOffline } = useOnlineStatus();
-  const { enqueue, queueSize, isProcessing, clearQueue } = useOfflineQueue(isOnline);
+  const { enqueue, queueSize } = useOfflineQueue(isOnline);
 
   const notify = useCallback((options) => {
     Swal.fire({
@@ -683,6 +645,7 @@ export const DiagramFlow = () => {
     return nodeMap.get(selectedNodeId) ?? null;
   }, [nodeMap, selectedNodeId]);
 
+  // ✅ Sidebar detail loader (IRD => getIdIrd SIEMPRE)
   useEffect(() => {
     let cancelled = false;
 
@@ -696,22 +659,14 @@ export const DiagramFlow = () => {
     }
 
     const isIrdNode = inferEquipoTipo(selectedNode) === "ird";
-    const localIrdData = isIrdNode ? getNodeIrdData(selectedNode) : null;
     const equipoId = getNodeIdentifier(selectedNode, EQUIPO_ID_PATHS, EQUIPO_ID_KEYS);
+
     const irdRefId = getIrdRefIdentifier(selectedNode);
     const irdId = getNodeIdentifier(selectedNode, IRD_ID_PATHS, IRD_ID_KEYS);
     const resolvedIrdId = irdRefId ?? irdId;
-    const idToUse = isIrdNode ? resolvedIrdId ?? equipoId : equipoId ?? resolvedIrdId;
 
-    console.log("DEBUG IRD NODE >>>", {
-      node: selectedNode,
-      isIrdNode,
-      equipoId,
-      irdRefId,
-      irdId,
-      resolvedIrdId,
-      idToUse,
-    });
+    // ✅ Regla: si es IRD, el ID para consultar es SOLO el del IRD
+    const idToUse = isIrdNode ? resolvedIrdId : (equipoId ?? resolvedIrdId);
 
     const fallbackDetail = buildSelectedNodeDetail(selectedNode, null, {
       isIrd: isIrdNode,
@@ -722,20 +677,23 @@ export const DiagramFlow = () => {
     setSelectedNodeDetail(fallbackDetail);
     setSelectedNodeDetailMessage(null);
 
-    if (!idToUse) {
-      if (isIrdNode) {
-        if (!localIrdData) {
-          setSelectedNodeDetailMessage({
-            type: "error",
-            text: "No se encontró el irdRef._id asociado a este IRD.",
-          });
-        }
-      } else if (!isIrdNode && !equipoId) {
-        setSelectedNodeDetailMessage({
-          type: "error",
-          text: "No se encontró un identificador de equipo para este nodo.",
-        });
-      }
+    // ✅ Si es IRD pero no hay ID IRD válido, cortamos (sin fallback a equipo)
+    if (isIrdNode && !resolvedIrdId) {
+      setSelectedNodeDetailMessage({
+        type: "error",
+        text: "Este nodo es IRD, pero no tiene un irdRef/_id (o irdId) válido para consultar getIdIrd().",
+      });
+      setSelectedNodeDetailLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!isIrdNode && !idToUse) {
+      setSelectedNodeDetailMessage({
+        type: "error",
+        text: "No se encontró un identificador válido para este nodo.",
+      });
       setSelectedNodeDetailLoading(false);
       return () => {
         cancelled = true;
@@ -745,177 +703,18 @@ export const DiagramFlow = () => {
     setSelectedNodeDetailLoading(true);
 
     const fetchDetail = async () => {
-      let nextMessage = null;
-
       try {
         let data = null;
 
-        // Fallback rápido: nodo IRD sin irdRef / irdId → usar equipo
-        if (isIrdNode && !resolvedIrdId && !localIrdData) {
-          if (equipoId) {
-            try {
-              const equipoResponse = await api.getIdEquipo(equipoId);
-              const equipoData = equipoResponse?.data ?? null;
-
-              if (cancelled) return;
-
-              const detail = buildSelectedNodeDetail(selectedNode, equipoData, {
-                isIrd: false,
-                equipoId,
-                irdId: null,
-              });
-
-              setSelectedNodeDetail(detail);
-              setSelectedNodeDetailMessage({
-                type: "warning",
-                text: "Este IRD no tiene irdRef asociado en la base de datos. Se muestran los datos del equipo.",
-              });
-            } catch (equipoErr) {
-              if (cancelled) return;
-              console.error("Error al obtener equipo para IRD sin irdRef:", equipoErr);
-              setSelectedNodeDetailMessage({
-                type: "error",
-                text: "No se pudo cargar la información del equipo asociado.",
-              });
-            } finally {
-              if (!cancelled) {
-                setSelectedNodeDetailLoading(false);
-              }
-            }
-          } else {
-            if (!cancelled) {
-              setSelectedNodeDetailMessage({
-                type: "error",
-                text: "El nodo IRD no tiene irdRef ni equipoId válidos.",
-              });
-              setSelectedNodeDetailLoading(false);
-            }
-          }
-          return;
-        }
-
         if (isIrdNode) {
-          const resolveEquipoDetailsFromIrd = async (irdData, irdIdentifier) => {
-            if (!irdData || typeof irdData !== "object") return null;
+          const response = await api.getIdIrd(idToUse);
+          const rawData = response?.data ?? null;
 
-            const candidateObjects = [
-              irdData?.equipoDetails,
-              irdData?.equipo,
-              irdData?.equipoRef,
-              irdData?.equipo?.equipoRef,
-              irdData?.irdRef?.equipo,
-              irdData?.irdRef?.equipoRef,
-            ];
-
-            for (const candidate of candidateObjects) {
-              if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
-                return candidate;
-              }
-            }
-
-            const seenIds = new Set();
-            const enqueueCandidateId = (rawValue) => {
-              const extracted = extractIdentifier(rawValue, EQUIPO_ID_KEYS);
-              if (extracted) {
-                seenIds.add(extracted);
-              }
-            };
-
-            enqueueCandidateId(irdData?.equipoDetails);
-            enqueueCandidateId(irdData?.equipo);
-            enqueueCandidateId(irdData?.equipoRef);
-            enqueueCandidateId(irdData?.equipo?.equipoRef);
-            enqueueCandidateId(irdData?.irdRef?.equipo);
-            enqueueCandidateId(irdData?.irdRef?.equipoRef);
-            enqueueCandidateId(irdData?.irdRef);
-
-            if (equipoId) {
-              seenIds.add(equipoId);
-            }
-
-            for (const candidateId of seenIds) {
-              if (irdIdentifier && candidateId === irdIdentifier) {
-                continue;
-              }
-              try {
-                const equipoResponse = await api.getIdEquipo(candidateId);
-                const equipoData = equipoResponse?.data ?? null;
-                if (equipoData) {
-                  return equipoData;
-                }
-              } catch (equipoError) {
-                console.warn(
-                  "No se pudo obtener detalles del equipo desde irdRef:",
-                  candidateId,
-                  equipoError
-                );
-              }
-            }
-
-            return null;
-          };
-
-          try {
-            const response = await api.getIdIrd(idToUse);
-            console.log(
-              "getIdIrd → response.data:",
-              JSON.stringify(response?.data, null, 2)
-            );
-            const rawData = response?.data ?? null;
-
-            // Si el backend devuelve null para el IRD, fallback al equipo
-            if (!rawData) {
-              if (equipoId) {
-                try {
-                  const equipoResponse = await api.getIdEquipo(equipoId);
-                  data = equipoResponse?.data ?? null;
-                  nextMessage = {
-                    type: "warning",
-                    text: "No se encontró el IRD en la base de datos. Se muestran los datos del equipo asociado.",
-                  };
-                } catch (equipoError) {
-                  console.error("Error al obtener equipo asociado:", equipoError);
-                  throw equipoError;
-                }
-              } else {
-                throw new Error("IRD no encontrado en la base de datos.");
-              }
-            } else {
-              data = rawData;
-            }
-
-            // Si el IRD tiene información de equipo asociada, combinarla para el sidebar.
-            if (data) {
-              const equipoDetails = await resolveEquipoDetailsFromIrd(
-                data,
-                resolvedIrdId ?? irdId ?? null
-              );
-              if (cancelled) return;
-              if (equipoDetails) {
-                data = {
-                  ...data,
-                  equipoDetails,
-                };
-              }
-            }
-          } catch (irdError) {
-            console.error("Error al obtener IRD:", irdError);
-            if (equipoId) {
-              try {
-                const response = await api.getIdEquipo(equipoId);
-                data = response?.data ?? null;
-                nextMessage = {
-                  type: "warning",
-                  text: "No se pudo obtener el detalle del IRD. Se muestran los datos del equipo asociado.",
-                };
-              } catch (equipoError) {
-                console.error("Error al obtener equipo asociado:", equipoError);
-                throw equipoError;
-              }
-            } else {
-              throw irdError;
-            }
+          if (!rawData) {
+            throw new Error("No se encontró el IRD en la base de datos.");
           }
+
+          data = rawData;
         } else {
           const response = await api.getIdEquipo(idToUse);
           data = response?.data ?? null;
@@ -930,27 +729,17 @@ export const DiagramFlow = () => {
         });
 
         setSelectedNodeDetail(detail);
-        setSelectedNodeDetailMessage(nextMessage);
+        setSelectedNodeDetailMessage(null);
       } catch (err) {
         if (cancelled) return;
-        console.error("Error al obtener detalle del equipo:", err);
-        if (isIrdNode && localIrdData) {
-          const detail = buildSelectedNodeDetail(selectedNode, localIrdData, {
-            isIrd: true,
-            equipoId,
-            irdId: resolvedIrdId ?? irdId,
-          });
-          setSelectedNodeDetail(detail);
-          setSelectedNodeDetailMessage({
-            type: "warning",
-            text: "No se pudo cargar la información actualizada del IRD. Se muestran los datos asociados al nodo.",
-          });
-        } else {
-          setSelectedNodeDetailMessage({
-            type: "error",
-            text: "No se pudo cargar la información actualizada.",
-          });
-        }
+        console.error("Error al obtener detalle:", err);
+
+        setSelectedNodeDetailMessage({
+          type: "error",
+          text: isIrdNode
+            ? "No se pudo cargar el detalle del IRD desde getIdIrd()."
+            : "No se pudo cargar la información actualizada.",
+        });
       } finally {
         if (!cancelled) {
           setSelectedNodeDetailLoading(false);
@@ -985,19 +774,19 @@ export const DiagramFlow = () => {
 
   const patchEdgeReconnectRetry = useMemo(
     () =>
-      withRetry(
-        (edgeId, payload) => api.patchChannelEdgeReconnect(id, edgeId, payload),
-        { retries: 2, baseDelay: 200 }
-      ),
+      withRetry((edgeId, payload) => api.patchChannelEdgeReconnect(id, edgeId, payload), {
+        retries: 2,
+        baseDelay: 200,
+      }),
     [id]
   );
 
   const patchEdgeTooltipRetry = useMemo(
     () =>
-      withRetry(
-        (edgeId, payload) => api.patchChannelEdgeTooltip(id, edgeId, payload),
-        { retries: 2, baseDelay: 200 }
-      ),
+      withRetry((edgeId, payload) => api.patchChannelEdgeTooltip(id, edgeId, payload), {
+        retries: 2,
+        baseDelay: 200,
+      }),
     [id]
   );
 
@@ -1007,7 +796,6 @@ export const DiagramFlow = () => {
         if (!position) return;
         const rollbackFn = nodeRollbackRef.current.get(nodeId);
 
-        // Si no hay conexión, agregar a la cola
         if (!isOnline) {
           enqueue({
             type: "node-position",
@@ -1020,10 +808,7 @@ export const DiagramFlow = () => {
               setNodes((prev) =>
                 prev.map((node) =>
                   node.id === nodeId
-                    ? {
-                        ...node,
-                        data: { ...(node.data || {}), savingPosition: false },
-                      }
+                    ? { ...node, data: { ...(node.data || {}), savingPosition: false } }
                     : node
                 )
               );
@@ -1041,16 +826,12 @@ export const DiagramFlow = () => {
           setNodes((prev) =>
             prev.map((node) =>
               node.id === nodeId
-                ? {
-                    ...node,
-                    data: { ...(node.data || {}), savingPosition: false },
-                  }
+                ? { ...node, data: { ...(node.data || {}), savingPosition: false } }
                 : node
             )
           );
           notify({ icon: "success", title: "Posición guardada" });
         } catch (error) {
-          // Si el error es de red, agregar a la cola
           if (error.message?.includes("Network") || error.code === "ERR_NETWORK") {
             enqueue({
               type: "node-position",
@@ -1063,22 +844,14 @@ export const DiagramFlow = () => {
                 setNodes((prev) =>
                   prev.map((node) =>
                     node.id === nodeId
-                      ? {
-                          ...node,
-                          data: { ...(node.data || {}), savingPosition: false },
-                        }
+                      ? { ...node, data: { ...(node.data || {}), savingPosition: false } }
                       : node
                   )
                 );
               },
             });
-            notify({
-              icon: "warning",
-              title: "Error de red - Cambio en cola",
-              timer: 1800,
-            });
+            notify({ icon: "warning", title: "Error de red - Cambio en cola", timer: 1800 });
           } else {
-            // Error no relacionado con red, hacer rollback
             nodeSavingRef.current.delete(nodeId);
             const original = nodeOriginalPositionRef.current.get(nodeId);
             nodeOriginalPositionRef.current.delete(nodeId);
@@ -1098,11 +871,7 @@ export const DiagramFlow = () => {
                 )
               );
             }
-            notify({
-              icon: "error",
-              title: "No se pudo guardar posición",
-              timer: 2600,
-            });
+            notify({ icon: "error", title: "No se pudo guardar posición", timer: 2600 });
           }
         }
       }, 320),
@@ -1119,7 +888,6 @@ export const DiagramFlow = () => {
     (edgeId, payload, tooltipPayload) => {
       const rollback = edgeRollbackRef.current.get(edgeId);
 
-      // Si no hay conexión, agregar a la cola
       if (!isOnline) {
         enqueue({
           type: "edge-reconnect",
@@ -1134,14 +902,7 @@ export const DiagramFlow = () => {
             setEdges((prev) =>
               prev.map((edge) =>
                 edge.id === edgeId
-                  ? {
-                      ...edge,
-                      data: {
-                        ...(edge.data || {}),
-                        isSaving: false,
-                        ...(tooltipPayload || {}),
-                      },
-                    }
+                  ? { ...edge, data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) } }
                   : edge
               )
             );
@@ -1162,20 +923,12 @@ export const DiagramFlow = () => {
           setEdges((prev) =>
             prev.map((edge) =>
               edge.id === edgeId
-                ? {
-                    ...edge,
-                    data: {
-                      ...(edge.data || {}),
-                      isSaving: false,
-                      ...(tooltipPayload || {}),
-                    },
-                  }
+                ? { ...edge, data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) } }
                 : edge
             )
           );
           notify({ icon: "success", title: "Enlace actualizado" });
         } catch (error) {
-          // Si el error es de red, agregar a la cola
           if (error.message?.includes("Network") || error.code === "ERR_NETWORK") {
             enqueue({
               type: "edge-reconnect",
@@ -1192,34 +945,21 @@ export const DiagramFlow = () => {
                     edge.id === edgeId
                       ? {
                           ...edge,
-                          data: {
-                            ...(edge.data || {}),
-                            isSaving: false,
-                            ...(tooltipPayload || {}),
-                          },
+                          data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) },
                         }
                       : edge
                   )
                 );
               },
             });
-            notify({
-              icon: "warning",
-              title: "Error de red - Cambio en cola",
-              timer: 1800,
-            });
+            notify({ icon: "warning", title: "Error de red - Cambio en cola", timer: 1800 });
           } else {
-            // Error no relacionado con red, hacer rollback
             edgeLocksRef.current.delete(edgeId);
             edgeRollbackRef.current.delete(edgeId);
             if (rollback) {
               setEdges((prev) => rollback(prev));
             }
-            notify({
-              icon: "error",
-              title: "No se pudo reconectar el enlace",
-              timer: 2600,
-            });
+            notify({ icon: "error", title: "No se pudo reconectar el enlace", timer: 2600 });
           }
         }
       })();
@@ -1229,15 +969,14 @@ export const DiagramFlow = () => {
 
   // Persistencia de label positions (PATCH /label-positions) con optimistic updates
   useEffect(() => {
-    const pending = new Map(); // edgeId -> { x, y }
-    const rollbacks = new Map(); // edgeId -> rollback function
+    const pending = new Map();
+    const rollbacks = new Map();
     let t = null;
 
     const handler = (e) => {
       const { id: edgeId, x, y } = e.detail || {};
       if (!edgeId) return;
 
-      // Optimistic update: actualizar el estado local inmediatamente
       setEdges((prev) => {
         const edgeIndex = prev.findIndex((edge) => edge.id === edgeId);
         if (edgeIndex === -1) return prev;
@@ -1245,19 +984,11 @@ export const DiagramFlow = () => {
         const edge = prev[edgeIndex];
         const originalLabelPosition = edge.data?.labelPosition || null;
 
-        // Guardar rollback
         rollbacks.set(edgeId, () => {
           setEdges((current) =>
             current.map((e) =>
               e.id === edgeId
-                ? {
-                    ...e,
-                    data: {
-                      ...(e.data || {}),
-                      labelPosition: originalLabelPosition,
-                      isSavingLabel: false,
-                    },
-                  }
+                ? { ...e, data: { ...(e.data || {}), labelPosition: originalLabelPosition, isSavingLabel: false } }
                 : e
             )
           );
@@ -1266,11 +997,7 @@ export const DiagramFlow = () => {
         const next = [...prev];
         next[edgeIndex] = {
           ...edge,
-          data: {
-            ...(edge.data || {}),
-            labelPosition: { x, y },
-            isSavingLabel: true,
-          },
+          data: { ...(edge.data || {}), labelPosition: { x, y }, isSavingLabel: true },
         };
         return next;
       });
@@ -1292,37 +1019,21 @@ export const DiagramFlow = () => {
             labelPositions: { edges: edgesPayload },
           });
 
-          // Success: remover indicador de guardado
           setEdges((prev) =>
             prev.map((edge) =>
               edgeIds.includes(edge.id)
-                ? {
-                    ...edge,
-                    data: {
-                      ...(edge.data || {}),
-                      isSavingLabel: false,
-                    },
-                  }
+                ? { ...edge, data: { ...(edge.data || {}), isSavingLabel: false } }
                 : edge
             )
           );
 
-          // Limpiar rollbacks exitosos
           edgeIds.forEach((edgeId) => rollbacks.delete(edgeId));
-
           notify({ icon: "success", title: "Posiciones de etiquetas guardadas" });
         } catch (err) {
           console.error("PATCH label-positions error:", err);
-
-          // Rollback en caso de error
           rollbacks.forEach((rollbackFn) => rollbackFn());
           rollbacks.clear();
-
-          notify({
-            icon: "error",
-            title: "No se pudo guardar las posiciones",
-            timer: 2600,
-          });
+          notify({ icon: "error", title: "No se pudo guardar las posiciones", timer: 2600 });
         }
       }, 250);
     };
@@ -1343,10 +1054,8 @@ export const DiagramFlow = () => {
 
       const res = await api.getChannelDiagramById(id);
 
-      const nodesRaw =
-        res?.data?.nodes ?? res?.data?.signal?.nodes ?? res?.data?.channel?.nodes ?? [];
-      const edgesRaw =
-        res?.data?.edges ?? res?.data?.signal?.edges ?? res?.data?.channel?.edges ?? [];
+      const nodesRaw = res?.data?.nodes ?? res?.data?.signal?.nodes ?? res?.data?.channel?.nodes ?? [];
+      const edgesRaw = res?.data?.edges ?? res?.data?.signal?.edges ?? res?.data?.channel?.edges ?? [];
 
       const channelRes =
         res?.data?.signal ??
@@ -1371,11 +1080,8 @@ export const DiagramFlow = () => {
   }, [id]);
 
   useEffect(() => {
-    if (USE_MOCK) {
-      setLoading(false);
-    } else {
-      fetchDataFlow();
-    }
+    if (USE_MOCK) setLoading(false);
+    else fetchDataFlow();
   }, [fetchDataFlow]);
 
   // --- Handlers React Flow ---
@@ -1383,11 +1089,7 @@ export const DiagramFlow = () => {
     (changes) => {
       setNodes((prev) => {
         changes.forEach((change) => {
-          // Guardar posición original cuando empieza el drag
-          if (
-            change.type === "position" &&
-            !nodeOriginalPositionRef.current.has(change.id)
-          ) {
+          if (change.type === "position" && !nodeOriginalPositionRef.current.has(change.id)) {
             const originalNode = prev.find((node) => node.id === change.id);
             if (originalNode) {
               nodeOriginalPositionRef.current.set(change.id, {
@@ -1397,7 +1099,6 @@ export const DiagramFlow = () => {
             }
           }
 
-          // Cleanup de refs cuando se eliminan nodos
           if (change.type === "remove") {
             nodeOriginalPositionRef.current.delete(change.id);
             nodeSavingRef.current.delete(change.id);
@@ -1410,28 +1111,23 @@ export const DiagramFlow = () => {
 
         changes.forEach((change) => {
           if (change.type === "position" && change.position) {
-            const snapshot = {
-              x: change.position.x,
-              y: change.position.y,
-            };
+            const snapshot = { x: change.position.x, y: change.position.y };
+
             nodeRollbackRef.current.set(change.id, (current) =>
               current.map((node) =>
                 node.id === change.id
                   ? {
                       ...node,
                       position: {
-                        x:
-                          nodeOriginalPositionRef.current.get(change.id)?.x ??
-                          node.position.x,
-                        y:
-                          nodeOriginalPositionRef.current.get(change.id)?.y ??
-                          node.position.y,
+                        x: nodeOriginalPositionRef.current.get(change.id)?.x ?? node.position.x,
+                        y: nodeOriginalPositionRef.current.get(change.id)?.y ?? node.position.y,
                       },
                       data: { ...(node.data || {}), savingPosition: false },
                     }
                   : node
               )
             );
+
             nodePositionDebounce(change.id, snapshot);
           }
         });
@@ -1440,10 +1136,7 @@ export const DiagramFlow = () => {
           const shouldFlag = nodeSavingRef.current.has(node.id);
           const currentFlag = Boolean(node.data?.savingPosition);
           if (shouldFlag === currentFlag) return node;
-          return {
-            ...node,
-            data: { ...(node.data || {}), savingPosition: shouldFlag },
-          };
+          return { ...node, data: { ...(node.data || {}), savingPosition: shouldFlag } };
         });
       });
     },
@@ -1452,7 +1145,6 @@ export const DiagramFlow = () => {
 
   const onEdgesChange = useCallback((changes) => {
     setEdges((prev) => {
-      // Cleanup de refs cuando se eliminan edges
       changes.forEach((change) => {
         if (change.type === "remove") {
           edgeLocksRef.current.delete(change.id);
@@ -1469,12 +1161,7 @@ export const DiagramFlow = () => {
       nodeSavingRef.current.add(node.id);
       setNodes((prev) =>
         prev.map((entry) =>
-          entry.id === node.id
-            ? {
-                ...entry,
-                data: { ...(entry.data || {}), savingPosition: true },
-              }
-            : entry
+          entry.id === node.id ? { ...entry, data: { ...(entry.data || {}), savingPosition: true } } : entry
         )
       );
       nodePositionDebounce.flush(node.id);
@@ -1494,56 +1181,35 @@ export const DiagramFlow = () => {
   /* ------------------- onConnect: crear edge + persistir ------------------- */
   const onConnect = useCallback(
     (params) => {
-      let {
-        source,
-        target,
-        sourceHandle: rawSourceHandle,
-        targetHandle: rawTargetHandle,
-      } = params || {};
+      let { source, target, sourceHandle: rawSourceHandle, targetHandle: rawTargetHandle } = params || {};
       if (!source || !target) return;
 
       const sNode = nodeMap.get(source);
       const tNode = nodeMap.get(target);
 
-      // SOURCE: auto libre si no viene o está ocupado
       const srcUsed = usedHandlesByNode(edges, source, "source");
       let sourceHandle = rawSourceHandle;
       if (!sourceHandle || srcUsed.has(sourceHandle)) {
         const side = guessSideForSource(sNode, tNode);
         sourceHandle = firstFreeHandle(srcUsed, "out", side, MAX_HANDLES_PER_SIDE[side]);
         if (!sourceHandle) {
-          const sides = ["right", "left", "top", "bottom"].filter(
-            (x) => x !== side
-          );
+          const sides = ["right", "left", "top", "bottom"].filter((x) => x !== side);
           for (const alt of sides) {
-            sourceHandle = firstFreeHandle(
-              srcUsed,
-              "out",
-              alt,
-              MAX_HANDLES_PER_SIDE[alt]
-            );
+            sourceHandle = firstFreeHandle(srcUsed, "out", alt, MAX_HANDLES_PER_SIDE[alt]);
             if (sourceHandle) break;
           }
         }
       }
 
-      // TARGET: auto libre si no viene o está ocupado
       const tgtUsed = usedHandlesByNode(edges, target, "target");
       let targetHandle = rawTargetHandle;
       if (!targetHandle || tgtUsed.has(targetHandle)) {
         const side = guessSideForTarget(sNode, tNode);
         targetHandle = firstFreeHandle(tgtUsed, "in", side, MAX_HANDLES_PER_SIDE[side]);
         if (!targetHandle) {
-          const sides = ["left", "right", "top", "bottom"].filter(
-            (x) => x !== side
-          );
+          const sides = ["left", "right", "top", "bottom"].filter((x) => x !== side);
           for (const alt of sides) {
-            targetHandle = firstFreeHandle(
-              tgtUsed,
-              "in",
-              alt,
-              MAX_HANDLES_PER_SIDE[alt]
-            );
+            targetHandle = firstFreeHandle(tgtUsed, "in", alt, MAX_HANDLES_PER_SIDE[alt]);
             if (targetHandle) break;
           }
         }
@@ -1557,8 +1223,6 @@ export const DiagramFlow = () => {
       const sourceLabel = sNode?.data?.label ?? source;
       const targetLabel = tNode?.data?.label ?? target;
 
-      // ✅ NO guardamos nombres de nodos como "puertos"
-      // labelStart/labelEnd deben quedar para puertos reales
       const baseForTooltip = {
         data: { labelStart: "", labelEnd: "", tooltipTitle: "Etiqueta centro" },
         label: undefined,
@@ -1582,22 +1246,16 @@ export const DiagramFlow = () => {
         },
       };
 
-      // Optimistic update: agregar edge al estado local inmediatamente
       setEdges((prev) => addEdge(newEdge, prev));
 
-      // Persistir usando el nuevo endpoint POST
       api
         .createChannelEdge(id, newEdge)
         .then((result) => {
-          if (result.ok) {
-            notify({ icon: "success", title: "Enlace creado" });
-          } else {
-            throw new Error(result.message || "Error al crear enlace");
-          }
+          if (result.ok) notify({ icon: "success", title: "Enlace creado" });
+          else throw new Error(result.message || "Error al crear enlace");
         })
         .catch((error) => {
           console.error("Error creando edge:", error);
-          // Rollback: remover el edge del estado local
           setEdges((prev) => prev.filter((e) => e.id !== newEdge.id));
           notify({
             icon: "error",
@@ -1638,7 +1296,6 @@ export const DiagramFlow = () => {
           const targetNode = nodeMap.get(target);
           const others = prev.filter((entry) => entry.id !== edge.id);
 
-          // ---------- SOURCE HANDLE ----------
           let sourceHandle = newConnection.sourceHandle ?? edge.sourceHandle;
           const usedSource = usedHandlesByNode(others, source, "source");
           if (!sourceHandle || usedSource.has(sourceHandle)) {
@@ -1647,14 +1304,11 @@ export const DiagramFlow = () => {
               firstFreeHandle(usedSource, "out", preferred, MAX_HANDLES_PER_SIDE[preferred]) ||
               ["right", "left", "top", "bottom"]
                 .filter((side) => side !== preferred)
-                .map((alt) =>
-                  firstFreeHandle(usedSource, "out", alt, MAX_HANDLES_PER_SIDE[alt])
-                )
+                .map((alt) => firstFreeHandle(usedSource, "out", alt, MAX_HANDLES_PER_SIDE[alt]))
                 .find(Boolean) ||
               null;
           }
 
-          // ---------- TARGET HANDLE ----------
           let targetHandle = newConnection.targetHandle ?? edge.targetHandle;
           const usedTarget = usedHandlesByNode(others, target, "target");
           if (!targetHandle || usedTarget.has(targetHandle)) {
@@ -1663,19 +1317,14 @@ export const DiagramFlow = () => {
               firstFreeHandle(usedTarget, "in", preferred, MAX_HANDLES_PER_SIDE[preferred]) ||
               ["left", "right", "top", "bottom"]
                 .filter((side) => side !== preferred)
-                .map((alt) =>
-                  firstFreeHandle(usedTarget, "in", alt, MAX_HANDLES_PER_SIDE[alt])
-                )
+                .map((alt) => firstFreeHandle(usedTarget, "in", alt, MAX_HANDLES_PER_SIDE[alt]))
                 .find(Boolean) ||
               null;
           }
 
           if (!sourceHandle || !targetHandle) {
             aborted = true;
-            notify({
-              icon: "warning",
-              title: "No hay handles libres disponibles",
-            });
+            notify({ icon: "warning", title: "No hay handles libres disponibles" });
             return edge;
           }
 
@@ -1688,15 +1337,7 @@ export const DiagramFlow = () => {
           const sourceLabel = sourceNode?.data?.label ?? source;
           const targetLabel = targetNode?.data?.label ?? target;
 
-          // --- PATCH para la API (solo reconexión)
-          patchPayload = {
-            source,
-            target,
-            sourceHandle,
-            targetHandle,
-          };
-
-          // ✅ Tooltip unificado (Origen/Destino)
+          patchPayload = { source, target, sourceHandle, targetHandle };
           tooltipPayload = buildTooltipFromEdge(edge, sourceLabel, targetLabel);
 
           return {
@@ -1712,16 +1353,11 @@ export const DiagramFlow = () => {
               tooltip: tooltipPayload.tooltip,
               isSaving: true,
             },
-            markerEnd:
-              newConnection?.markerEnd ??
-              edge.markerEnd ??
-              defaultEdgeOptions.markerEnd,
+            markerEnd: newConnection?.markerEnd ?? edge.markerEnd ?? defaultEdgeOptions.markerEnd,
           };
         });
 
-        if (!patchPayload || aborted) {
-          return prev;
-        }
+        if (!patchPayload || aborted) return prev;
 
         edgeRollbackRef.current.set(oldEdge.id, rollback);
         edgeLocksRef.current.set(oldEdge.id, true);
@@ -1736,9 +1372,7 @@ export const DiagramFlow = () => {
   if (loading) return <p>Cargando diagrama...</p>;
   if (error) return <p>{error}</p>;
 
-  const wrapperClassName = `diagram-flow-wrapper${
-    selectedNode ? " diagram-flow-wrapper--with-sidebar" : ""
-  }`;
+  const wrapperClassName = `diagram-flow-wrapper${selectedNode ? " diagram-flow-wrapper--with-sidebar" : ""}`;
 
   return (
     <ErrorBoundary
@@ -1747,17 +1381,15 @@ export const DiagramFlow = () => {
         console.error("Error en DiagramFlow:", error, errorInfo);
       }}
     >
-      <ConnectionBanner
-        isOnline={isOnline}
-        wasOffline={wasOffline}
-        queueSize={queueSize}
-      />
+      <ConnectionBanner isOnline={isOnline} wasOffline={wasOffline} queueSize={queueSize} />
+
       <div className={wrapperClassName}>
         {!isAuth && (
           <div className="read-only-banner" role="status" aria-live="polite">
             Modo lectura: inicia sesión para editar el diagrama.
           </div>
         )}
+
         <div className="outlet-main">
           <div className="dashboard_flow">
             <div className="container__flow">
@@ -1782,6 +1414,7 @@ export const DiagramFlow = () => {
                 <Controls position="top-left" />
               </ReactFlow>
             </div>
+
             <NodeDetailSidebar
               isOpen={Boolean(selectedNode)}
               detail={selectedNodeDetail}
