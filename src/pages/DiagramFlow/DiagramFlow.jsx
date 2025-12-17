@@ -48,6 +48,7 @@ const EQUIPO_TYPE_IMAGE_MAP = {
   satelite: "https://i.ibb.co/23VpLD2N/satelite.jpg",
   rtes: "https://i.ibb.co/VcfxF9hz/rtes.jpg",
   dcm: "https://i.ibb.co/VcfxF9hz/rtes.jpg",
+  mpls:"https://i.ibb.co/0yLDm0vQ/Chat-GPT-Image-17-dic-2025-08-06-30.png"
 };
 
 const nodeTypes = { imageNode: CustomNode };

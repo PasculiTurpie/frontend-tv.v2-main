@@ -23,7 +23,6 @@ const SchemaEquipos = Yup.object().shape({
     tipoNombre: Yup.string().required("Campo obligatorio"),
     ip_gestion: Yup.string()
         .trim("No debe tener espacios al inicio o al final")
-        .required("Campo obligatorio")
         .matches(ipGestionRegex, "Debe ser una ip válida"),
 });
 
