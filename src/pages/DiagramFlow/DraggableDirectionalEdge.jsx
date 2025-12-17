@@ -151,78 +151,71 @@ export default function DraggableDirectionalEdge(props) {
       : null;
 
   /* ----------------------- Render del Edge ----------------------- */
-  return (
-    <>
-      {/* Definición del marker */}
-      <svg width="0" height="0" style={{ position: "absolute" }}>
-        <defs>
-          <marker
-            id={markerId}
-            markerWidth="12"
-            markerHeight="12"
-            viewBox="0 0 12 12"
-            refX="10"
-            refY="6"
-            orient="auto"
-            markerUnits="strokeWidth"
-          >
-            <path
-              d="M 2 2 L 10 6 L 2 10 Z"
-              fill="context-fill"
-              stroke="context-stroke"
-              strokeWidth="1"
-              strokeLinejoin="round"
-            />
-          </marker>
-        </defs>
-      </svg>
+return (
+  <>
+    {/* ✅ Definición del marker dentro del MISMO SVG de ReactFlow */}
+    <defs>
+      <marker
+        id={markerId}
+        markerWidth="12"
+        markerHeight="12"
+        viewBox="0 0 12 12"
+        refX="10"
+        refY="6"
+        orient="auto"
+        markerUnits="strokeWidth"
+      >
+        <path
+          d="M 2 2 L 10 6 L 2 10 Z"
+          fill={chosenColor}         // ✅ relleno sólido
+          stroke={chosenColor}       // (opcional) borde del mismo color
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+      </marker>
+    </defs>
 
-      {/* Línea visible */}
-      <path
-        d={edgePath}
-        fill="none"
-        style={animatedStyle}
-        markerEnd={markerUrl}
-        className="edge-stroke-animated"
-      />
+    {/* Línea visible */}
+    <path
+      d={edgePath}
+      fill="none"
+      style={animatedStyle}
+      markerEnd={markerUrl}
+      className="edge-stroke-animated"
+    />
 
-      {/* ✅ Path invisible para hover + seguimiento del mouse */}
-      <path
-        d={edgePath}
-        fill="none"
-        stroke="transparent"
-        strokeWidth={16}
-        onMouseEnter={showTooltip}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={hideTooltipDelayed}
-        onClick={(e) => {
-          // ✅ click sobre el edge: fija / libera
-          e.stopPropagation();
-          showTooltip(e);
-          setSticky((v) => !v);
-        }}
-      />
+    {/* Path invisible para hover */}
+    <path
+      d={edgePath}
+      fill="none"
+      stroke="transparent"
+      strokeWidth={16}
+      onMouseEnter={showTooltip}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={hideTooltipDelayed}
+      onClick={(e) => {
+        e.stopPropagation();
+        showTooltip(e);
+        setSticky((v) => !v);
+      }}
+    />
 
-      {/* Tooltip "Guardando…" */}
-      {isSaving && (
-        <foreignObject
-          x={Math.min(sourceX, targetX) + Math.abs(targetX - sourceX) / 2 - 40}
-          y={Math.min(sourceY, targetY) + Math.abs(targetY - sourceY) / 2 - 50}
-          width={90}
-          height={24}
-          requiredExtensions="http://www.w3.org/1999/xhtml"
-        >
-          <div
-            xmlns="http://www.w3.org/1999/xhtml"
-            className="edge-saving-tooltip"
-          >
-            Guardando…
-          </div>
-        </foreignObject>
-      )}
+    {isSaving && (
+      <foreignObject
+        x={Math.min(sourceX, targetX) + Math.abs(targetX - sourceX) / 2 - 40}
+        y={Math.min(sourceY, targetY) + Math.abs(targetY - sourceY) / 2 - 50}
+        width={90}
+        height={24}
+        requiredExtensions="http://www.w3.org/1999/xhtml"
+      >
+        <div xmlns="http://www.w3.org/1999/xhtml" className="edge-saving-tooltip">
+          Guardando…
+        </div>
+      </foreignObject>
+    )}
 
-      {/* ✅ Tooltip real (Portal) */}
-      {tooltipPortal}
-    </>
-  );
+    {tooltipPortal}
+  </>
+);
+
 }
