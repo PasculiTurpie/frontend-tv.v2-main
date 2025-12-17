@@ -1,5 +1,4 @@
 // pages/Ird/IrdForm.jsx
-import { useEffect, useState } from "react";
 import { Formik, Field, Form } from "formik";
 import { Link } from "react-router-dom";
 import * as Yup from "yup";
@@ -47,127 +46,8 @@ const IrdSchema = Yup.object().shape({
     .matches(/\d+/, "Ingrese un número"),
 });
 
-// Helper para normalizar nombres de tipo
-const normalizeName = (value) =>
-  String(value ?? "").trim().toLowerCase();
-
 // ------------------------ COMPONENTE ------------------------
 const IrdForm = () => {
-  const [tipoMap, setTipoMap] = useState({}); // { 'ird': ObjectId, ... }
-  const [loadingTipos, setLoadingTipos] = useState(false);
-
-  // Carga inicial de tipos de equipo y construye un mapa por nombre normalizado
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      try {
-        setLoadingTipos(true);
-        const res = await api.getTipoEquipo(); // puede ser { data: [...] } o [...]
-        // Soporta distintos formatos de respuesta
-        const raw = res?.data ?? res;
-        const arr = Array.isArray(raw)
-          ? raw
-          : Array.isArray(raw?.tipos)
-          ? raw.tipos
-          : Array.isArray(raw?.data)
-          ? raw.data
-          : [];
-
-        const map = {};
-        for (const t of arr) {
-          if (t?._id && t?.tipoNombre) {
-            const key = normalizeName(t.tipoNombre);
-            map[key] = t._id;
-          }
-        }
-
-        if (mounted) {
-          setTipoMap(map);
-          console.log("TipoMap inicial:", map);
-        }
-      } catch (err) {
-        console.warn(
-          "No se pudo cargar TipoEquipo:",
-          err?.response?.data || err
-        );
-      } finally {
-        if (mounted) setLoadingTipos(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // Asegura que exista el tipo 'ird' y devuelve su ObjectId
-  const ensureTipoId = async (name = "ird") => {
-    const key = normalizeName(name);
-
-    // 1) Si ya lo tenemos en el mapa, usarlo
-    if (tipoMap[key]) {
-      return tipoMap[key];
-    }
-
-    // 2) Si no existe en el mapa, intentamos crearlo
-    try {
-      const created = await api.createTipoEquipo({ tipoNombre: name.trim() });
-      const raw = created?.data ?? created;
-
-      // Soporta que venga como objeto directo, o anidado
-      const createdObj = Array.isArray(raw)
-        ? raw[0]
-        : raw?.tipo || raw?.tipoEquipo || raw;
-
-      const id = createdObj?._id;
-
-      console.log("Respuesta createTipoEquipo:", created, "parsed id:", id);
-
-      if (id) {
-        setTipoMap((prev) => ({ ...prev, [key]: id }));
-        return id;
-      }
-    } catch (error) {
-      console.warn("No se pudo crear TipoEquipo 'ird'", error);
-    }
-
-    // 3) Si crear falló, reintenta refrescar el listado por si existe
-    try {
-      const res = await api.getTipoEquipo();
-      const raw = res?.data ?? res;
-      const arr = Array.isArray(raw)
-        ? raw
-        : Array.isArray(raw?.tipos)
-        ? raw.tipos
-        : Array.isArray(raw?.data)
-        ? raw.data
-        : [];
-
-      const found = arr.find(
-        (t) => normalizeName(t?.tipoNombre) === key
-      );
-
-      console.log("Reintento getTipoEquipo, encontrado:", found);
-
-      if (found?._id) {
-        setTipoMap((prev) => ({
-          ...prev,
-          [key]: found._id,
-        }));
-        return found._id;
-      }
-    } catch (refreshError) {
-      console.warn(
-        "No se pudo refrescar TipoEquipo tras error",
-        refreshError
-      );
-    }
-
-    // 4) Si nada funcionó, devolvemos null (NO lanzamos error aquí)
-    return null;
-  };
-
   return (
     <>
       <div className="outlet-main">
@@ -210,76 +90,23 @@ const IrdForm = () => {
           }}
           validationSchema={IrdSchema}
           enableReinitialize={true}
-          onSubmit={async (values, { resetForm }) => {
-            if (loadingTipos) {
-              Swal.fire({
-                icon: "info",
-                title: "Cargando tipos de equipo…",
-                text: "Espera un momento e intenta nuevamente.",
-              });
-              return;
-            }
-
+          onSubmit={async (values, { resetForm, setSubmitting }) => {
             try {
-              // 1) Crear IRD
-              const irdResp = await api.createIrd(values);
-              const ird = irdResp?.data ?? irdResp;
-              const irdId = ird?._id;
+              setSubmitting(true);
 
-              console.log("IRD creado:", ird);
+              // ✅ Backend debe crear IRD + Equipo automáticamente
+              const resp = await api.createIrd(values);
+              const data = resp?.data ?? resp;
 
-              if (!irdId) {
-                throw new Error(
-                  "No se obtuvo el _id del IRD creado desde la API."
-                );
-              }
+              // soporta backend que devuelva { ird, equipo } o solo ird
+              const ird = data?.ird ?? data;
+              const equipo = data?.equipo ?? null;
 
-              // 2) Intentar conseguir ObjectId del tipo 'ird'
-              let equipoOk = false;
-              let equipoMsg = "";
-              let tipoIrdId = null;
+              const tipoEquipoNombre =
+                equipo?.tipoNombre?.tipoNombre ||
+                equipo?.tipoNombre?.tipoNombre?.toUpperCase?.() ||
+                null;
 
-              try {
-                tipoIrdId = await ensureTipoId("ird");
-              } catch (e) {
-                console.warn("Error en ensureTipoId:", e);
-                equipoMsg =
-                  e?.message ||
-                  "No se pudo asegurar el TipoEquipo 'ird'.";
-              }
-
-              // 3) Crear Equipo asociado (referenciando IRD), sólo si tenemos tipoIrdId
-              if (tipoIrdId) {
-                try {
-                  await api.createEquipo({
-                    nombre: values.nombreIrd,
-                    marca: values.marcaIrd,
-                    modelo: values.modelIrd,
-                    tipoNombre: tipoIrdId, // ObjectId del tipo ird
-                    ip_gestion: values.ipAdminIrd,
-                    irdRef: irdId, // referencia al IRD recién creado
-                  });
-                  equipoOk = true;
-                  equipoMsg = "Equipo creado correctamente.";
-                } catch (bgErr) {
-                  equipoOk = false;
-                  equipoMsg =
-                    bgErr?.response?.data?.message ||
-                    "No se pudo crear Equipo desde IRD.";
-                  console.warn(
-                    "No se pudo crear Equipo:",
-                    bgErr?.response?.data || bgErr
-                  );
-                }
-              } else {
-                equipoOk = false;
-                if (!equipoMsg) {
-                  equipoMsg =
-                    "No se encontró ni se pudo crear el TipoEquipo 'ird'. Crea el tipo manualmente y luego el equipo.";
-                }
-              }
-
-              // 4) Feedback y reset
               Swal.fire({
                 title: "IRD guardado",
                 icon: "success",
@@ -290,31 +117,39 @@ const IrdForm = () => {
                     <div><b>Modelo:</b> ${values.modelIrd}</div>
                     <div><b>IP Gestión:</b> ${values.ipAdminIrd}</div>
                     <hr/>
-                    <div><b>Equipo:</b> ${
-                      equipoOk ? "Creado" : "No creado"
+                    <div><b>Equipo:</b> ${equipo ? "Creado" : "No informado"}</div>
+                    <div><b>TipoEquipo:</b> ${
+                      tipoEquipoNombre ? String(tipoEquipoNombre).toUpperCase() : "No informado"
                     }</div>
-                    <div style="color:${
-                      equipoOk ? "#065f46" : "#991b1b"
-                    }">${equipoMsg}</div>
+                    ${
+                      ird?._id
+                        ? `<div style="margin-top:8px;"><b>IRD _id:</b> ${ird._id}</div>`
+                        : ""
+                    }
+                    ${
+                      equipo?._id
+                        ? `<div><b>Equipo _id:</b> ${equipo._id}</div>`
+                        : ""
+                    }
                   </div>
                 `,
               });
 
               resetForm();
             } catch (error) {
-              console.warn("Error creando IRD o Equipo:", error);
+              console.warn("Error creando IRD:", error);
               Swal.fire({
                 title: "Error",
                 icon: "error",
-                text: `No se pudo crear el IRD`,
-                footer: `${
-                  error?.response?.data?.message || error.message || ""
-                }`,
+                text: "No se pudo crear el IRD",
+                footer: `${error?.response?.data?.message || error.message || ""}`,
               });
+            } finally {
+              setSubmitting(false);
             }
           }}
         >
-          {({ errors, touched }) => (
+          {({ errors, touched, isSubmitting }) => (
             <Form className={`form__add ${styles.formGrid}`}>
               <h1 className="form__titulo">Ingresa un IRD</h1>
 
@@ -333,9 +168,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.nombreIrd && touched.nombreIrd ? (
-                      <div className="form__group-error">
-                        {errors.nombreIrd}
-                      </div>
+                      <div className="form__group-error">{errors.nombreIrd}</div>
                     ) : null}
                   </div>
 
@@ -351,9 +184,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.marcaIrd && touched.marcaIrd ? (
-                      <div className="form__group-error">
-                        {errors.marcaIrd}
-                      </div>
+                      <div className="form__group-error">{errors.marcaIrd}</div>
                     ) : null}
                   </div>
 
@@ -369,9 +200,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.modelIrd && touched.modelIrd ? (
-                      <div className="form__group-error">
-                        {errors.modelIrd}
-                      </div>
+                      <div className="form__group-error">{errors.modelIrd}</div>
                     ) : null}
                   </div>
 
@@ -387,9 +216,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.ipAdminIrd && touched.ipAdminIrd ? (
-                      <div className="form__group-error">
-                        {errors.ipAdminIrd}
-                      </div>
+                      <div className="form__group-error">{errors.ipAdminIrd}</div>
                     ) : null}
                   </div>
 
@@ -405,9 +232,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.versionIrd && touched.versionIrd ? (
-                      <div className="form__group-error">
-                        {errors.versionIrd}
-                      </div>
+                      <div className="form__group-error">{errors.versionIrd}</div>
                     ) : null}
                   </div>
 
@@ -423,9 +248,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.uaIrd && touched.uaIrd ? (
-                      <div className="form__group-error">
-                        {errors.uaIrd}
-                      </div>
+                      <div className="form__group-error">{errors.uaIrd}</div>
                     ) : null}
                   </div>
                 </div>
@@ -444,9 +267,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.tidReceptor && touched.tidReceptor ? (
-                      <div className="form__group-error">
-                        {errors.tidReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.tidReceptor}</div>
                     ) : null}
                   </div>
 
@@ -462,9 +283,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.typeReceptor && touched.typeReceptor ? (
-                      <div className="form__group-error">
-                        {errors.typeReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.typeReceptor}</div>
                     ) : null}
                   </div>
 
@@ -480,9 +299,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.feqReceptor && touched.feqReceptor ? (
-                      <div className="form__group-error">
-                        {errors.feqReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.feqReceptor}</div>
                     ) : null}
                   </div>
 
@@ -498,17 +315,12 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.symbolRateIrd && touched.symbolRateIrd ? (
-                      <div className="form__group-error">
-                        {errors.symbolRateIrd}
-                      </div>
+                      <div className="form__group-error">{errors.symbolRateIrd}</div>
                     ) : null}
                   </div>
 
                   <div className="form__group">
-                    <label
-                      htmlFor="fecReceptorIrd"
-                      className="form__group-label"
-                    >
+                    <label htmlFor="fecReceptorIrd" className="form__group-label">
                       FEC
                       <br />
                       <Field
@@ -519,9 +331,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.fecReceptorIrd && touched.fecReceptorIrd ? (
-                      <div className="form__group-error">
-                        {errors.fecReceptorIrd}
-                      </div>
+                      <div className="form__group-error">{errors.fecReceptorIrd}</div>
                     ) : null}
                   </div>
 
@@ -537,9 +347,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.swAdmin && touched.swAdmin ? (
-                      <div className="form__group-error">
-                        {errors.swAdmin}
-                      </div>
+                      <div className="form__group-error">{errors.swAdmin}</div>
                     ) : null}
                   </div>
                 </div>
@@ -547,10 +355,7 @@ const IrdForm = () => {
                 {/* COLUMNA 3 */}
                 <div className={styles.columns__group}>
                   <div className="form__group">
-                    <label
-                      htmlFor="modulationReceptorIrd"
-                      className="form__group-label"
-                    >
+                    <label htmlFor="modulationReceptorIrd" className="form__group-label">
                       Modulación
                       <br />
                       <Field
@@ -560,11 +365,8 @@ const IrdForm = () => {
                         name="modulationReceptorIrd"
                       />
                     </label>
-                    {errors.modulationReceptorIrd &&
-                    touched.modulationReceptorIrd ? (
-                      <div className="form__group-error">
-                        {errors.modulationReceptorIrd}
-                      </div>
+                    {errors.modulationReceptorIrd && touched.modulationReceptorIrd ? (
+                      <div className="form__group-error">{errors.modulationReceptorIrd}</div>
                     ) : null}
                   </div>
 
@@ -580,9 +382,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.rellOfReceptor && touched.rellOfReceptor ? (
-                      <div className="form__group-error">
-                        {errors.rellOfReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.rellOfReceptor}</div>
                     ) : null}
                   </div>
 
@@ -598,17 +398,12 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.nidReceptor && touched.nidReceptor ? (
-                      <div className="form__group-error">
-                        {errors.nidReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.nidReceptor}</div>
                     ) : null}
                   </div>
 
                   <div className="form__group">
-                    <label
-                      htmlFor="cvirtualReceptor"
-                      className="form__group-label"
-                    >
+                    <label htmlFor="cvirtualReceptor" className="form__group-label">
                       Canal Virtual
                       <br />
                       <Field
@@ -619,9 +414,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.cvirtualReceptor && touched.cvirtualReceptor ? (
-                      <div className="form__group-error">
-                        {errors.cvirtualReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.cvirtualReceptor}</div>
                     ) : null}
                   </div>
 
@@ -637,9 +430,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.vctReceptor && touched.vctReceptor ? (
-                      <div className="form__group-error">
-                        {errors.vctReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.vctReceptor}</div>
                     ) : null}
                   </div>
 
@@ -655,9 +446,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.portSw && touched.portSw ? (
-                      <div className="form__group-error">
-                        {errors.portSw}
-                      </div>
+                      <div className="form__group-error">{errors.portSw}</div>
                     ) : null}
                   </div>
                 </div>
@@ -665,10 +454,7 @@ const IrdForm = () => {
                 {/* COLUMNA 4 */}
                 <div className={styles.columns__group}>
                   <div className="form__group">
-                    <label
-                      htmlFor="outputReceptor"
-                      className="form__group-label"
-                    >
+                    <label htmlFor="outputReceptor" className="form__group-label">
                       Salida receptor
                       <br />
                       <Field
@@ -679,17 +465,12 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.outputReceptor && touched.outputReceptor ? (
-                      <div className="form__group-error">
-                        {errors.outputReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.outputReceptor}</div>
                     ) : null}
                   </div>
 
                   <div className="form__group">
-                    <label
-                      htmlFor="multicastReceptor"
-                      className="form__group-label"
-                    >
+                    <label htmlFor="multicastReceptor" className="form__group-label">
                       Multicast Receptor
                       <br />
                       <Field
@@ -700,17 +481,12 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.multicastReceptor && touched.multicastReceptor ? (
-                      <div className="form__group-error">
-                        {errors.multicastReceptor}
-                      </div>
+                      <div className="form__group-error">{errors.multicastReceptor}</div>
                     ) : null}
                   </div>
 
                   <div className="form__group">
-                    <label
-                      htmlFor="ipVideoMulticast"
-                      className="form__group-label"
-                    >
+                    <label htmlFor="ipVideoMulticast" className="form__group-label">
                       Ip Video Multicast
                       <br />
                       <Field
@@ -721,9 +497,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.ipVideoMulticast && touched.ipVideoMulticast ? (
-                      <div className="form__group-error">
-                        {errors.ipVideoMulticast}
-                      </div>
+                      <div className="form__group-error">{errors.ipVideoMulticast}</div>
                     ) : null}
                   </div>
 
@@ -739,9 +513,7 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.locationRow && touched.locationRow ? (
-                      <div className="form__group-error">
-                        {errors.locationRow}
-                      </div>
+                      <div className="form__group-error">{errors.locationRow}</div>
                     ) : null}
                   </div>
 
@@ -757,16 +529,14 @@ const IrdForm = () => {
                       />
                     </label>
                     {errors.locationCol && touched.locationCol ? (
-                      <div className="form__group-error">
-                        {errors.locationCol}
-                      </div>
+                      <div className="form__group-error">{errors.locationCol}</div>
                     ) : null}
                   </div>
                 </div>
               </div>
 
-              <button type="submit" className={`btn btn-primary`}>
-                Enviar
+              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                {isSubmitting ? "Guardando..." : "Enviar"}
               </button>
             </Form>
           )}
