@@ -25,12 +25,17 @@ const SatelliteSchema = Yup.object().shape({
     .required("Campo obligatorio"),
 });
 
-// Normaliza posibles respuestas: a veces tu api retorna r (axios response), otras r.data
 const normalizeArray = (resp) => {
   if (Array.isArray(resp)) return resp;
   if (Array.isArray(resp?.data)) return resp.data;
   return [];
 };
+
+const getErrMsg = (e) =>
+  e?.response?.data?.message ||
+  e?.response?.data?.error ||
+  e?.message ||
+  "Error desconocido";
 
 const SatelliteForm = () => {
   const [polarizations, setPolarizations] = useState([]);
@@ -38,7 +43,6 @@ const SatelliteForm = () => {
   const [loadingTipos, setLoadingTipos] = useState(false);
   const nameInputRef = useRef(null);
 
-  // Polarizaciones
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -56,7 +60,6 @@ const SatelliteForm = () => {
     };
   }, []);
 
-  // Carga inicial TipoEquipo (solo para UI / cache)
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -64,7 +67,6 @@ const SatelliteForm = () => {
         setLoadingTipos(true);
         const res = await api.getTipoEquipo();
         const arr = normalizeArray(res);
-
         const map = {};
         for (const t of arr) {
           if (t?.tipoNombre && t?._id) {
@@ -83,14 +85,12 @@ const SatelliteForm = () => {
     };
   }, []);
 
-  // ✅ A prueba de estado: SIEMPRE resuelve el _id contra backend
+  // ✅ Resuelve contra backend (no depende del estado)
   const ensureTipoId = async (name = "satelite") => {
     const key = String(name).toLowerCase().trim();
 
-    // 0) Si ya está en cache local, úsalo (pero igual es opcional)
     if (tipoMap[key]) return tipoMap[key];
 
-    // 1) Buscar en backend
     const res1 = await api.getTipoEquipo();
     const arr1 = normalizeArray(res1);
     const found1 = arr1.find(
@@ -101,19 +101,16 @@ const SatelliteForm = () => {
       return found1._id;
     }
 
-    // 2) No existe -> crear
     try {
-      const created = await api.createTipoEquipo({ tipoNombre: name }); // retorna r.data
+      const created = await api.createTipoEquipo({ tipoNombre: name });
       if (created?._id) {
         setTipoMap((prev) => ({ ...prev, [key]: created._id }));
         return created._id;
       }
     } catch (e) {
-      // puede fallar por carrera (ya existía) u otro error
-      console.warn("createTipoEquipo falló, reintentando getTipoEquipo:", e?.response?.data || e);
+      console.warn("createTipoEquipo falló:", e?.response?.data || e);
     }
 
-    // 3) Releer y devolver (por si lo creó otro proceso)
     const res2 = await api.getTipoEquipo();
     const arr2 = normalizeArray(res2);
     const found2 = arr2.find(
@@ -157,35 +154,38 @@ const SatelliteForm = () => {
           let satId = null;
 
           try {
-            // 1) crear satélite
-            const sat = await api.createSatelite({
+            const payloadSat = {
               satelliteName: values.satelliteName.trim(),
               satelliteUrl: values.satelliteUrl.trim(),
               satelliteType: values.satelliteType,
-            });
+            };
+            console.log("payloadSat =>", payloadSat);
+
+            // 1) crear satélite
+            const sat = await api.createSatelite(payloadSat);
 
             satId = sat?._id;
+            console.log("sat created =>", sat);
+
             if (!satId) throw new Error("No se recibió _id del satélite.");
 
             // 2) asegurar tipo satelite
             const tipoSatId = await ensureTipoId("satelite");
             console.log("tipoSatId =>", tipoSatId);
-
-            if (!tipoSatId) throw new Error("tipoSatId undefined (no se pudo resolver TipoEquipo satelite).");
+            if (!tipoSatId) throw new Error("tipoSatId undefined.");
 
             // 3) crear equipo (OBLIGATORIO)
             const payloadEquipo = {
               nombre: values.satelliteName.trim(),
               marca: "SAT",
               modelo: "GENERIC",
-              tipoNombre: tipoSatId, // ✅ requerido por tu schema + controller
+              tipoNombre: tipoSatId,
               satelliteRef: satId,
             };
             console.log("payloadEquipo =>", payloadEquipo);
 
             await api.createEquipo(payloadEquipo);
 
-            // 4) mostrar success
             const selected = (polarizations || []).find(
               (p) => p?._id === values.satelliteType
             );
@@ -208,24 +208,25 @@ const SatelliteForm = () => {
             resetForm();
             nameInputRef.current?.focus();
           } catch (error) {
-            // rollback: si satélite se creó pero equipo falló
+            const msg = getErrMsg(error);
+
+            // ✅ rollback SOLO si realmente se creó satélite (satId válido)
             if (satId) {
               try {
                 await api.deleteSatelliteId(satId);
                 console.warn("Rollback OK: satélite eliminado:", satId);
               } catch (rbErr) {
-                console.warn(
-                  "Rollback falló (no se pudo borrar satélite):",
-                  rbErr?.response?.data || rbErr
-                );
+                console.warn("Rollback falló:", getErrMsg(rbErr));
               }
+            } else {
+              console.warn("Sin rollback: satélite no alcanzó a crearse (satId null).");
             }
 
             Swal.fire({
               title: "Error",
               icon: "error",
-              text: "No se pudo completar la creación Satélite + Equipo. Se revirtió el satélite.",
-              footer: `${error?.response?.data?.message || error.message}`,
+              text: "No se pudo completar la creación Satélite + Equipo.",
+              footer: msg,
             });
           } finally {
             setSubmitting(false);
