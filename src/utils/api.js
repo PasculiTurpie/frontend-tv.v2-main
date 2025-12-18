@@ -194,10 +194,10 @@ class Api {
         return this._axios.put(`/signals/${id}`, values).then((r) => r.data);
     }
     searchChannels(keyword) {
-  return this._axios
-    .get("/search", { params: { keyword } })
-    .then((r) => r);
-}
+        return this._axios
+            .get("/search", { params: { keyword } })
+            .then((r) => r);
+    }
 
     // ====== IRD / EQUIPOS ======
     getIrd() {
@@ -217,11 +217,14 @@ class Api {
     }
     // SUGERENCIA APLICADA: recrear/sincronizar Equipo desde el IRD (POST /irds/:id/recreate-equipo)
     recreateEquipoFromIrd(id) {
-        return this._axios.post(`/irds/${id}/recreate-equipo`).then((r) => r.data);
+        return this._axios
+            .post(`/irds/${id}/recreate-equipo`)
+            .then((r) => r.data);
     }
     // Opcional: si decides manejarlo via PUT con flag recreateEquipo=true
     updateIrdWithRecreate(id, values) {
-        return this._axios.put(`/irds/${id}`, values, { params: { recreateEquipo: true } })
+        return this._axios
+            .put(`/irds/${id}`, values, { params: { recreateEquipo: true } })
             .then((r) => r.data);
     }
 
@@ -245,7 +248,7 @@ class Api {
             .then((r) => r.data);
     }
 
-    getContact(){
+    getContact() {
         return this._axios.get("/contacts").then((r) => r);
     }
     createContact(values) {
@@ -258,7 +261,7 @@ class Api {
 
         return this._axios.post("/contacts", payload).then((r) => r);
     }
-    deleteContact(id){
+    deleteContact(id) {
         return this._axios.post(`/contact/${id}`).then((r) => r);
     }
     updateContact(id, values) {
@@ -270,7 +273,7 @@ class Api {
 
         return this._axios.put(`/contact/${id}`, payload).then((r) => r);
     }
-    getIdContact(){
+    getIdContact() {
         return this._axios.get(`/contact/${id}`).then((r) => r);
     }
 
@@ -306,26 +309,27 @@ class Api {
         return this._axios.put(`/equipos/${id}`, values).then((r) => r);
     }
 
-  getTipoEquipo() {
-  return this._axios.get("/tipo-equipo").then((r) => r.data);
-}
+    getTipoEquipo() {
+        return this._axios.get("/tipo-equipo").then((r) => r.data);
+    }
 
-deleteTipoEquipo(id) {
-  return this._axios.delete(`/tipo-equipo/${id}`).then((r) => r.data);
-}
+    deleteTipoEquipo(id) {
+        return this._axios.delete(`/tipo-equipo/${id}`).then((r) => r.data);
+    }
 
-createTipoEquipo(values) {
-  return this._axios.post("/tipo-equipo", values).then((r) => r.data);
-}
+    createTipoEquipo(values) {
+        return this._axios.post("/tipo-equipo", values).then((r) => r.data);
+    }
 
-getIdTipoEquipo(id) {
-  return this._axios.get(`/tipo-equipo/${id}`).then((r) => r.data);
-}
+    getIdTipoEquipo(id) {
+        return this._axios.get(`/tipo-equipo/${id}`).then((r) => r.data);
+    }
 
-updateTipoEquipo(id, values) {
-  return this._axios.put(`/tipo-equipo/${id}`, values).then((r) => r.data);
-}
-
+    updateTipoEquipo(id, values) {
+        return this._axios
+            .put(`/tipo-equipo/${id}`, values)
+            .then((r) => r.data);
+    }
 
     createChannelDiagram(payload) {
         return this._axios.post(`/channels`, payload).then((r) => r.data);
@@ -545,7 +549,10 @@ updateTipoEquipo(id, values) {
                 error;
             const results = await Promise.allSettled(
                 uniqueHosts.map(async (host) => {
-                    const payload = await this.getTitanServices(host, pathOrOptions);
+                    const payload = await this.getTitanServices(
+                        host,
+                        pathOrOptions
+                    );
                     return { ok: true, host, ip: host, data: payload };
                 })
             );
@@ -564,7 +571,8 @@ updateTipoEquipo(id, values) {
                         output.status = errorReason.response.status;
                         output.statusText = errorReason.response.statusText;
                         output.error =
-                            errorReason.response.data ?? errorReason.response.statusText;
+                            errorReason.response.data ??
+                            errorReason.response.statusText;
                     } else if (errorReason.message) {
                         output.error = errorReason.message;
                     } else {
@@ -642,7 +650,9 @@ updateTipoEquipo(id, values) {
 }
 
 const apiBaseUrl =
-    env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL || "https://signal-operacionestv.grupogtd.com/api/v1/";
+    env.VITE_API_BASE_URL ||
+    process.env.VITE_API_BASE_URL ||
+    "https://signal-operacionestv.grupogtd.com/api/v1/";
 
 const api = new Api(apiBaseUrl);
 export default api;
