@@ -184,7 +184,17 @@ const SatelliteForm = () => {
             };
             console.log("payloadEquipo =>", payloadEquipo);
 
-            await api.createEquipo(payloadEquipo);
+            try {
+              await api.createEquipo(payloadEquipo);
+            } catch (e) {
+              console.error("POST /equipos falló =>", {
+                status: e?.response?.status,
+                data: e?.response?.data,
+                message: e?.message,
+                payloadEquipo,
+              });
+              throw e;
+            }
 
             const selected = (polarizations || []).find(
               (p) => p?._id === values.satelliteType
@@ -208,6 +218,12 @@ const SatelliteForm = () => {
             resetForm();
             nameInputRef.current?.focus();
           } catch (error) {
+            console.error("SatelliteForm submit error =>", {
+              status: error?.response?.status,
+              data: error?.response?.data,
+              message: error?.message,
+            });
+
             const msg = getErrMsg(error);
 
             // ✅ rollback SOLO si realmente se creó satélite (satId válido)
