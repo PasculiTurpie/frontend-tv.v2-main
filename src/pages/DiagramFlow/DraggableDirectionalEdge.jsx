@@ -163,26 +163,24 @@ export default function DraggableDirectionalEdge(props) {
     <>
       {/* ✅ Marker en el mismo SVG del Edge (NO svg separado) */}
       <defs>
-        <marker
-          id={markerId}
-          markerWidth="12"
-          markerHeight="12"
-          viewBox="0 0 12 12"
-          refX="10"
-          refY="6"
-          orient="auto"
-          markerUnits="strokeWidth"
-        >
-          {/* ✅ Flecha sólida */}
-          <path
-            d="M 2 2 L 10 6 L 2 10 Z"
-            fill={chosenColor}
-            stroke={chosenColor}
-            strokeWidth="1"
-            strokeLinejoin="round"
-          />
-        </marker>
-      </defs>
+  <marker
+    id={markerId}
+    markerWidth="12"
+    markerHeight="12"
+    viewBox="0 0 12 12"
+    refX="10"
+    refY="6"
+    orient="auto"
+    markerUnits="strokeWidth"
+  >
+    <path
+      d="M 2 2 L 10 6 L 2 10 Z"
+      fill={chosenColor}
+      stroke="none"
+    />
+  </marker>
+</defs>
+
 
       {/* Línea visible */}
       <path
