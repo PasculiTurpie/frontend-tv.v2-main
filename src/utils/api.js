@@ -306,21 +306,26 @@ class Api {
         return this._axios.put(`/equipos/${id}`, values).then((r) => r);
     }
 
-    getTipoEquipo() {
-        return this._axios.get("/tipo-equipo").then((r) => r);
-    }
-    deleteTipoEquipo(id) {
-        return this._axios.delete(`/tipo-equipo/${id}`).then((r) => r);
-    }
-    createTipoEquipo(values) {
-        return this._axios.post("/tipo-equipo", values).then((r) => r.data);
-    }
-    getIdTipoEquipo(id) {
-        return this._axios.get(`/tipo-equipo/${id}`).then((r) => r);
-    }
-    updateTipoEquipo(id, values) {
-        return this._axios.put(`/tipo-equipo/${id}`, values).then((r) => r);
-    }
+  getTipoEquipo() {
+  return this._axios.get("/tipo-equipo").then((r) => r.data);
+}
+
+deleteTipoEquipo(id) {
+  return this._axios.delete(`/tipo-equipo/${id}`).then((r) => r.data);
+}
+
+createTipoEquipo(values) {
+  return this._axios.post("/tipo-equipo", values).then((r) => r.data);
+}
+
+getIdTipoEquipo(id) {
+  return this._axios.get(`/tipo-equipo/${id}`).then((r) => r.data);
+}
+
+updateTipoEquipo(id, values) {
+  return this._axios.put(`/tipo-equipo/${id}`, values).then((r) => r.data);
+}
+
 
     createChannelDiagram(payload) {
         return this._axios.post(`/channels`, payload).then((r) => r.data);
