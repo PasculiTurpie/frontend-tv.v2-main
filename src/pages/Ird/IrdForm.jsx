@@ -102,12 +102,12 @@ const IrdForm = () => {
                 ])
               );
 
-              console.log("[IRD][CREATE] Payload enviado:", payload);
+              
 
               // api.createIrd() ya devuelve r.data
               const data = await api.createIrd(payload);
 
-              console.log("[IRD][CREATE] Respuesta backend (data):", data);
+              
 
               const ird = data?.ird ?? data;
               const equipo = data?.equipo ?? null;
@@ -168,10 +168,10 @@ const IrdForm = () => {
             } catch (error) {
               // ✅ Logs completos del error Axios
               console.error("[IRD][CREATE] Error completo:", error);
-              console.log("[IRD][CREATE] status:", error?.response?.status);
-              console.log("[IRD][CREATE] data:", error?.response?.data);
-              console.log("[IRD][CREATE] headers:", error?.response?.headers);
-              console.log("[IRD][CREATE] message:", error?.message);
+              
+              
+              
+              
 
               const status = error?.response?.status ?? "N/A";
               const message =
