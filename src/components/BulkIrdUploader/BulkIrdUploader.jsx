@@ -133,9 +133,21 @@ const BulkIrdUploader = () => {
         </button>
       </div>
 
-
       {step === 1 && (
         <div>
+          <div
+            style={{
+              marginBottom: '16px',
+              padding: '14px 16px',
+              backgroundColor: '#e3f2fd',
+              borderRadius: '8px',
+              border: '1px solid #bbdefb',
+              color: '#0d47a1'
+            }}
+          >
+            <strong>Nota:</strong> En carga masiva se permiten <strong>duplicados</strong> (nombre, IP y equipos asociados).
+          </div>
+
           <div
             {...getRootProps()}
             style={{
@@ -163,8 +175,8 @@ const BulkIrdUploader = () => {
           <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff3cd', borderRadius: '8px' }}>
             <h4 style={{ margin: '0 0 8px 0', color: '#856404' }}>Columnas requeridas:</h4>
             <ul style={{ margin: '0', paddingLeft: '20px', color: '#856404' }}>
-              <li><strong>nombreIrd:</strong> Nombre único del IRD</li>
-              <li><strong>ipAdminIrd:</strong> IP de administración (única)</li>
+              <li><strong>nombreIrd:</strong> Nombre del IRD (puede repetirse)</li>
+              <li><strong>ipAdminIrd:</strong> IP de administración (puede repetirse)</li>
               <li><strong>marcaIrd:</strong> Marca del equipo</li>
               <li><strong>modelIrd:</strong> Modelo del equipo</li>
             </ul>
