@@ -153,7 +153,7 @@ const BulkIrdUploader = () => {
       className="outlet-main"
       style={{
         width: "100%",
-        maxWidth: "1200px", // ✅ se adapta a la ventana (ajusta si quieres)
+        maxWidth: "100%", // ✅ se adapta a la ventana (ajusta si quieres)
         margin: "0 auto",
         padding: "20px",
       }}
