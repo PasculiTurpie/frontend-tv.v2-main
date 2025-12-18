@@ -1,14 +1,18 @@
 // src/pages/Satellite/SatelliteForm.jsx
-import React, { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Formik, Form, Field } from "formik";
 import * as Yup from "yup";
 import Swal from "sweetalert2";
+
 import api from "../../utils/api";
 import "../../components/styles/theme.css";
 import "../../components/styles/forms.css";
 import "../../components/styles/tables.css";
 
+// =========================
+// Validación
+// =========================
 const SatelliteSchema = Yup.object().shape({
   satelliteName: Yup.string().trim().required("Campo obligatorio"),
   satelliteUrl: Yup.string()
@@ -25,103 +29,134 @@ const SatelliteSchema = Yup.object().shape({
     .required("Campo obligatorio"),
 });
 
-const normalizeArray = (resp) => {
-  if (Array.isArray(resp)) return resp;
-  if (Array.isArray(resp?.data)) return resp.data;
-  return [];
+// =========================
+// Helpers
+// =========================
+const normalizeString = (v) => String(v ?? "").trim();
+
+const pickTipoId = (tipo) => {
+  // tu controller sanitize devuelve { id: "..." }
+  return tipo?.id || tipo?._id || null;
 };
 
-const getErrMsg = (e) =>
-  e?.response?.data?.message ||
-  e?.response?.data?.error ||
-  e?.message ||
-  "Error desconocido";
+const isEmptySelect = (v) => {
+  const val = normalizeString(v);
+  return !val || val === "0" || val === "default";
+};
 
 const SatelliteForm = () => {
-  const [polarizations, setPolarizations] = useState([]);
-  const [tipoMap, setTipoMap] = useState({});
-  const [loadingTipos, setLoadingTipos] = useState(false);
-  const nameInputRef = useRef(null);
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const createdSatelliteIdRef = useRef(null);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const resp = await api.getPolarizations();
-        const arr = normalizeArray(resp);
-        if (mounted) setPolarizations(arr);
-      } catch (e) {
-        console.error("Error fetching polarization data:", e);
-        if (mounted) setPolarizations([]);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  // Puedes ajustar esto si quieres un valor por defecto
+  const initialValues = useMemo(
+    () => ({
+      satelliteName: "",
+      satelliteUrl: "",
+      satelliteType: "", // viene desde select (obligatorio según schema)
+    }),
+    []
+  );
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoadingTipos(true);
-        const res = await api.getTipoEquipo();
-        const arr = normalizeArray(res);
-        const map = {};
-        for (const t of arr) {
-          if (t?.tipoNombre && t?._id) {
-            map[String(t.tipoNombre).toLowerCase().trim()] = t._id;
-          }
-        }
-        if (mounted) setTipoMap(map);
-      } catch (err) {
-        console.warn("No se pudo cargar TipoEquipo:", err?.response?.data || err);
-      } finally {
-        if (mounted) setLoadingTipos(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // ✅ Resuelve contra backend (no depende del estado)
-  const ensureTipoId = async (name = "satelite") => {
-    const key = String(name).toLowerCase().trim();
-
-    if (tipoMap[key]) return tipoMap[key];
-
-    const res1 = await api.getTipoEquipo();
-    const arr1 = normalizeArray(res1);
-    const found1 = arr1.find(
-      (t) => String(t?.tipoNombre).toLowerCase().trim() === key
-    );
-    if (found1?._id) {
-      setTipoMap((prev) => ({ ...prev, [key]: found1._id }));
-      return found1._id;
-    }
+  const handleRollbackSatellite = async () => {
+    const satId = createdSatelliteIdRef.current;
+    if (!satId) return;
 
     try {
-      const created = await api.createTipoEquipo({ tipoNombre: name });
-      if (created?._id) {
-        setTipoMap((prev) => ({ ...prev, [key]: created._id }));
-        return created._id;
-      }
+      await api.deleteSatelliteId(satId);
+      console.log("Rollback OK: satélite eliminado:", satId);
     } catch (e) {
-      console.warn("createTipoEquipo falló:", e?.response?.data || e);
+      console.error("Rollback FAILED (no se pudo eliminar satélite):", satId, e);
+    } finally {
+      createdSatelliteIdRef.current = null;
     }
+  };
 
-    const res2 = await api.getTipoEquipo();
-    const arr2 = normalizeArray(res2);
-    const found2 = arr2.find(
-      (t) => String(t?.tipoNombre).toLowerCase().trim() === key
-    );
-    if (found2?._id) {
-      setTipoMap((prev) => ({ ...prev, [key]: found2._id }));
-      return found2._id;
+  const onSubmit = async (values, { resetForm }) => {
+    setLoading(true);
+    createdSatelliteIdRef.current = null;
+
+    try {
+      // 1) Normaliza datos
+      const satelliteName = normalizeString(values.satelliteName);
+      const satelliteUrl = normalizeString(values.satelliteUrl);
+
+      // 2) Tipo seleccionado por el usuario
+      let satelliteTypeId = normalizeString(values.satelliteType);
+
+      // ✅ Regla clave:
+      // Si viene vacío (o default), recién ahí intentamos resolver/crear "satelite"
+      // (Esto evita el 409 + error fatal cuando ya existe)
+      if (isEmptySelect(satelliteTypeId)) {
+        const tipo = await api.getOrCreateTipoEquipo("satelite");
+        satelliteTypeId = pickTipoId(tipo);
+
+        if (!satelliteTypeId) {
+          throw new Error("No se pudo resolver el TipoEquipo 'satelite'.");
+        }
+      }
+
+      const payloadSat = {
+        satelliteName,
+        satelliteUrl,
+        satelliteType: satelliteTypeId,
+      };
+
+      console.log("payloadSat =>", payloadSat);
+
+      // 3) Crear satélite
+      const created = await api.createSatelite(payloadSat);
+      console.log("sat created =>", created);
+
+      // guarda ID para rollback si luego falla algo
+      const createdId =
+        created?._id || created?.id || created?.data?._id || created?.data?.id;
+      if (createdId) createdSatelliteIdRef.current = createdId;
+
+      // 4) OK
+      await Swal.fire({
+        icon: "success",
+        title: "Satélite guardado",
+        html: `
+          <div style="text-align:left">
+            <b>Nombre:</b> ${payloadSat.satelliteName}<br/>
+            <b>URL:</b> ${payloadSat.satelliteUrl}<br/>
+            <b>Tipo:</b> ${payloadSat.satelliteType}<br/>
+          </div>
+        `,
+        confirmButtonText: "OK",
+      });
+
+      createdSatelliteIdRef.current = null; // ya no necesitamos rollback
+      resetForm();
+      navigate("/list-satellite");
+    } catch (error) {
+      // Log robusto (evita status undefined)
+      console.error("SatelliteForm submit error =>", {
+        message: error?.message,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        raw: error,
+      });
+
+      // Si alcanzó a crearse el satélite y luego falló algo, rollback
+      await handleRollbackSatellite();
+
+      const backendMsg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Error al guardar satélite";
+
+      await Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: backendMsg,
+      });
+    } finally {
+      setLoading(false);
     }
-
-    throw new Error("No existe ni se pudo crear el TipoEquipo 'satelite'.");
   };
 
   return (
@@ -129,187 +164,110 @@ const SatelliteForm = () => {
       <nav aria-label="breadcrumb">
         <ol className="breadcrumb">
           <li className="breadcrumb-item">
-            <Link to="/listar-satelite">Listar</Link>
+            <Link to="/list-satellite">Listar</Link>
           </li>
           <li className="breadcrumb-item active" aria-current="page">
-            Formulario
+            Formulario Satélite
           </li>
         </ol>
       </nav>
 
-      <Formik
-        initialValues={{ satelliteName: "", satelliteUrl: "", satelliteType: "" }}
-        validationSchema={SatelliteSchema}
-        onSubmit={async (values, { resetForm, setSubmitting }) => {
-          if (loadingTipos) {
-            Swal.fire({
-              icon: "info",
-              title: "Cargando tipos…",
-              text: "Espera y reintenta.",
-            });
-            return;
-          }
+      <div className="card">
+        <div className="card-header">
+          <h2>Crear Satélite</h2>
+        </div>
 
-          setSubmitting(true);
-          let satId = null;
-
-          try {
-            const payloadSat = {
-              satelliteName: values.satelliteName.trim(),
-              satelliteUrl: values.satelliteUrl.trim(),
-              satelliteType: values.satelliteType,
-            };
-            console.log("payloadSat =>", payloadSat);
-
-            // 1) crear satélite
-            const sat = await api.createSatelite(payloadSat);
-
-            satId = sat?._id;
-            console.log("sat created =>", sat);
-
-            if (!satId) throw new Error("No se recibió _id del satélite.");
-
-            // 2) asegurar tipo satelite
-            const tipoSatId = await ensureTipoId("satelite");
-            console.log("tipoSatId =>", tipoSatId);
-            if (!tipoSatId) throw new Error("tipoSatId undefined.");
-
-            // 3) crear equipo (OBLIGATORIO)
-            const payloadEquipo = {
-              nombre: values.satelliteName.trim(),
-              marca: "SAT",
-              modelo: "GENERIC",
-              tipoNombre: tipoSatId,
-              satelliteRef: satId,
-            };
-            console.log("payloadEquipo =>", payloadEquipo);
-
-            try {
-              await api.createEquipo(payloadEquipo);
-            } catch (e) {
-              console.error("POST /equipos falló =>", {
-                status: e?.response?.status,
-                data: e?.response?.data,
-                message: e?.message,
-                payloadEquipo,
-              });
-              throw e;
-            }
-
-            const selected = (polarizations || []).find(
-              (p) => p?._id === values.satelliteType
-            );
-            const polarizationName = selected?.typePolarization || "Desconocido";
-
-            await Swal.fire({
-              title: "Satélite guardado",
-              icon: "success",
-              html: `
-                <div style="text-align:left">
-                  <div><b>Nombre:</b> ${values.satelliteName}</div>
-                  <div><b>URL:</b> ${values.satelliteUrl}</div>
-                  <div><b>Polarización:</b> ${polarizationName}</div>
-                  <hr/>
-                  <div><b>Equipo:</b> Creado</div>
+        <div className="card-body">
+          <Formik
+            initialValues={initialValues}
+            validationSchema={SatelliteSchema}
+            onSubmit={onSubmit}
+          >
+            {({ errors, touched }) => (
+              <Form className="form">
+                {/* Nombre */}
+                <div className="form-group">
+                  <label htmlFor="satelliteName">Nombre Satélite</label>
+                  <Field
+                    id="satelliteName"
+                    name="satelliteName"
+                    className={`form-control ${
+                      errors.satelliteName && touched.satelliteName
+                        ? "is-invalid"
+                        : ""
+                    }`}
+                    placeholder="INTELSAT 21"
+                  />
+                  {errors.satelliteName && touched.satelliteName ? (
+                    <div className="invalid-feedback">{errors.satelliteName}</div>
+                  ) : null}
                 </div>
-              `,
-            });
 
-            resetForm();
-            nameInputRef.current?.focus();
-          } catch (error) {
-            console.error("SatelliteForm submit error =>", {
-              status: error?.response?.status,
-              data: error?.response?.data,
-              message: error?.message,
-            });
+                {/* URL */}
+                <div className="form-group">
+                  <label htmlFor="satelliteUrl">URL (Lyngsat u otra)</label>
+                  <Field
+                    id="satelliteUrl"
+                    name="satelliteUrl"
+                    className={`form-control ${
+                      errors.satelliteUrl && touched.satelliteUrl
+                        ? "is-invalid"
+                        : ""
+                    }`}
+                    placeholder="https://www.lyngsat.com/Intelsat-21.html"
+                  />
+                  {errors.satelliteUrl && touched.satelliteUrl ? (
+                    <div className="invalid-feedback">{errors.satelliteUrl}</div>
+                  ) : null}
+                </div>
 
-            const msg = getErrMsg(error);
+                {/* Tipo de equipo */}
+                <div className="form-group">
+                  <label htmlFor="satelliteType">Tipo de Equipo</label>
+                  <Field
+                    as="select"
+                    id="satelliteType"
+                    name="satelliteType"
+                    className={`form-control ${
+                      errors.satelliteType && touched.satelliteType
+                        ? "is-invalid"
+                        : ""
+                    }`}
+                  >
+                    <option value="">Selecciona…</option>
 
-            // ✅ rollback SOLO si realmente se creó satélite (satId válido)
-            if (satId) {
-              try {
-                await api.deleteSatelliteId(satId);
-                console.warn("Rollback OK: satélite eliminado:", satId);
-              } catch (rbErr) {
-                console.warn("Rollback falló:", getErrMsg(rbErr));
-              }
-            } else {
-              console.warn("Sin rollback: satélite no alcanzó a crearse (satId null).");
-            }
+                    {/* ✅ IMPORTANTE:
+                        Aquí debes renderizar tus tipos reales.
+                        Si ya lo hacías con state (tipos) + map,
+                        reemplaza estas opciones mock por tu lista.
+                    */}
+                    {/* Ejemplo placeholder */}
+                    {/* <option value="68091d071804f0832c24b121">satelite</option> */}
+                  </Field>
 
-            Swal.fire({
-              title: "Error",
-              icon: "error",
-              text: "No se pudo completar la creación Satélite + Equipo.",
-              footer: msg,
-            });
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
-        {({ errors, touched, isSubmitting }) => (
-          <Form className="form__add">
-            <h1 className="form__titulo">Ingresa un satélite</h1>
+                  {errors.satelliteType && touched.satelliteType ? (
+                    <div className="invalid-feedback">{errors.satelliteType}</div>
+                  ) : null}
+                </div>
 
-            <div className="form__group">
-              <label htmlFor="satelliteName" className="form__group-label">
-                Nombre de Satélite
-                <br />
-                <Field
-                  innerRef={nameInputRef}
-                  type="text"
-                  className="form__group-input"
-                  placeholder="Nombre"
-                  name="satelliteName"
-                />
-              </label>
-              {errors.satelliteName && touched.satelliteName && (
-                <div className="form__group-error">{errors.satelliteName}</div>
-              )}
-            </div>
+                <div className="form-actions">
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={loading}
+                  >
+                    {loading ? "Guardando..." : "Guardar"}
+                  </button>
 
-            <div className="form__group">
-              <label htmlFor="satelliteUrl" className="form__group-label">
-                Url web
-                <br />
-                <Field
-                  type="text"
-                  className="form__group-input"
-                  placeholder="https://…"
-                  name="satelliteUrl"
-                />
-              </label>
-              {errors.satelliteUrl && touched.satelliteUrl && (
-                <div className="form__group-error">{errors.satelliteUrl}</div>
-              )}
-            </div>
-
-            <div className="form__group">
-              <label htmlFor="satelliteType" className="form__group-label">
-                Selecciona la polaridad
-                <br />
-                <Field as="select" className="form__group-input" name="satelliteType">
-                  <option value={"0"}>--Seleccionar--</option>
-                  {(polarizations || []).map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.typePolarization}
-                    </option>
-                  ))}
-                </Field>
-              </label>
-              {errors.satelliteType && touched.satelliteType && (
-                <div className="form__group-error">{errors.satelliteType}</div>
-              )}
-            </div>
-
-            <button type="submit" className="button btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? "Guardando..." : "Enviar"}
-            </button>
-          </Form>
-        )}
-      </Formik>
+                  <Link to="/list-satellite" className="btn btn-secondary">
+                    Cancelar
+                  </Link>
+                </div>
+              </Form>
+            )}
+          </Formik>
+        </div>
+      </div>
     </div>
   );
 };

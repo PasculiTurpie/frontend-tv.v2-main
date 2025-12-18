@@ -331,6 +331,45 @@ class Api {
             .then((r) => r.data);
     }
 
+    // api.js (dentro de class Api)
+
+getTipoEquipoByName(name) {
+  const safe = encodeURIComponent(String(name ?? "").trim());
+  return this._axios.get(`/tipo-equipo/by-name/${safe}`).then((r) => r.data);
+}
+
+async getOrCreateTipoEquipo(tipoNombre) {
+  const name = String(tipoNombre ?? "").trim();
+  if (!name) throw new Error("tipoNombre is required");
+
+  // 1) intento obtener
+  try {
+    const existing = await this.getTipoEquipoByName(name);
+    return existing;
+  } catch (e) {
+    const status = e?.response?.status;
+    // si NO es 404, es un error real
+    if (status && status !== 404) throw e;
+  }
+
+  // 2) intento crear
+  try {
+    const created = await this.createTipoEquipo({ tipoNombre: name });
+    return created;
+  } catch (e) {
+    const status = e?.response?.status;
+
+    // 3) si ya existe (409), lo obtengo y sigo
+    if (status === 409) {
+      const existing = await this.getTipoEquipoByName(name);
+      return existing;
+    }
+
+    throw e;
+  }
+}
+
+
     createChannelDiagram(payload) {
         return this._axios.post(`/channels`, payload).then((r) => r.data);
     }
