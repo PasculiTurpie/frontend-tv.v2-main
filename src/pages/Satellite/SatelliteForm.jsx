@@ -25,6 +25,13 @@ const SatelliteSchema = Yup.object().shape({
     .required("Campo obligatorio"),
 });
 
+// Normaliza posibles respuestas: a veces tu api retorna r (axios response), otras r.data
+const normalizeArray = (resp) => {
+  if (Array.isArray(resp)) return resp;
+  if (Array.isArray(resp?.data)) return resp.data;
+  return [];
+};
+
 const SatelliteForm = () => {
   const [polarizations, setPolarizations] = useState([]);
   const [tipoMap, setTipoMap] = useState({});
@@ -36,29 +43,32 @@ const SatelliteForm = () => {
     let mounted = true;
     (async () => {
       try {
-        const resp = await api.getPolarizations(); // idealmente que retorne r.data
-        const arr = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [];
+        const resp = await api.getPolarizations();
+        const arr = normalizeArray(resp);
         if (mounted) setPolarizations(arr);
       } catch (e) {
         console.error("Error fetching polarization data:", e);
         if (mounted) setPolarizations([]);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // TipoEquipo map
+  // Carga inicial TipoEquipo (solo para UI / cache)
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         setLoadingTipos(true);
-        const res = await api.getTipoEquipo(); // hoy retorna axios response (r), por eso normalizamos
-        const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const res = await api.getTipoEquipo();
+        const arr = normalizeArray(res);
+
         const map = {};
         for (const t of arr) {
           if (t?.tipoNombre && t?._id) {
-            map[String(t.tipoNombre).toLowerCase()] = t._id;
+            map[String(t.tipoNombre).toLowerCase().trim()] = t._id;
           }
         }
         if (mounted) setTipoMap(map);
@@ -68,33 +78,50 @@ const SatelliteForm = () => {
         if (mounted) setLoadingTipos(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Asegura tipo 'satelite'
+  // ✅ A prueba de estado: SIEMPRE resuelve el _id contra backend
   const ensureTipoId = async (name = "satelite") => {
-    const key = String(name).toLowerCase();
+    const key = String(name).toLowerCase().trim();
+
+    // 0) Si ya está en cache local, úsalo (pero igual es opcional)
     if (tipoMap[key]) return tipoMap[key];
 
-    // 1) intentar crear
-    try {
-      const created = await api.createTipoEquipo({ tipoNombre: name }); // retorna r.data
-      const id = created?._id || null;
-      if (id) {
-        setTipoMap((prev) => ({ ...prev, [key]: id }));
-        return id;
-      }
-    } catch (error) {
-      console.warn("No se pudo crear TipoEquipo 'satelite':", error?.response?.data || error);
+    // 1) Buscar en backend
+    const res1 = await api.getTipoEquipo();
+    const arr1 = normalizeArray(res1);
+    const found1 = arr1.find(
+      (t) => String(t?.tipoNombre).toLowerCase().trim() === key
+    );
+    if (found1?._id) {
+      setTipoMap((prev) => ({ ...prev, [key]: found1._id }));
+      return found1._id;
     }
 
-    // 2) refrescar lista por si existía
-    const res = await api.getTipoEquipo();
-    const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-    const found = arr.find((t) => String(t?.tipoNombre).toLowerCase() === key);
-    if (found?._id) {
-      setTipoMap((prev) => ({ ...prev, [key]: found._id }));
-      return found._id;
+    // 2) No existe -> crear
+    try {
+      const created = await api.createTipoEquipo({ tipoNombre: name }); // retorna r.data
+      if (created?._id) {
+        setTipoMap((prev) => ({ ...prev, [key]: created._id }));
+        return created._id;
+      }
+    } catch (e) {
+      // puede fallar por carrera (ya existía) u otro error
+      console.warn("createTipoEquipo falló, reintentando getTipoEquipo:", e?.response?.data || e);
+    }
+
+    // 3) Releer y devolver (por si lo creó otro proceso)
+    const res2 = await api.getTipoEquipo();
+    const arr2 = normalizeArray(res2);
+    const found2 = arr2.find(
+      (t) => String(t?.tipoNombre).toLowerCase().trim() === key
+    );
+    if (found2?._id) {
+      setTipoMap((prev) => ({ ...prev, [key]: found2._id }));
+      return found2._id;
     }
 
     throw new Error("No existe ni se pudo crear el TipoEquipo 'satelite'.");
@@ -104,8 +131,12 @@ const SatelliteForm = () => {
     <div className="outlet-main">
       <nav aria-label="breadcrumb">
         <ol className="breadcrumb">
-          <li className="breadcrumb-item"><Link to="/listar-satelite">Listar</Link></li>
-          <li className="breadcrumb-item active" aria-current="page">Formulario</li>
+          <li className="breadcrumb-item">
+            <Link to="/listar-satelite">Listar</Link>
+          </li>
+          <li className="breadcrumb-item active" aria-current="page">
+            Formulario
+          </li>
         </ol>
       </nav>
 
@@ -114,7 +145,11 @@ const SatelliteForm = () => {
         validationSchema={SatelliteSchema}
         onSubmit={async (values, { resetForm, setSubmitting }) => {
           if (loadingTipos) {
-            Swal.fire({ icon: "info", title: "Cargando tipos…", text: "Espera y reintenta." });
+            Swal.fire({
+              icon: "info",
+              title: "Cargando tipos…",
+              text: "Espera y reintenta.",
+            });
             return;
           }
 
@@ -134,19 +169,26 @@ const SatelliteForm = () => {
 
             // 2) asegurar tipo satelite
             const tipoSatId = await ensureTipoId("satelite");
-            if (!tipoSatId) throw new Error("No se pudo obtener tipoNombre para satélite.");
+            console.log("tipoSatId =>", tipoSatId);
+
+            if (!tipoSatId) throw new Error("tipoSatId undefined (no se pudo resolver TipoEquipo satelite).");
 
             // 3) crear equipo (OBLIGATORIO)
-            await api.createEquipo({
+            const payloadEquipo = {
               nombre: values.satelliteName.trim(),
               marca: "SAT",
               modelo: "GENERIC",
-              tipoNombre: tipoSatId, // ✅ coincide con tu schema
+              tipoNombre: tipoSatId, // ✅ requerido por tu schema + controller
               satelliteRef: satId,
-            });
+            };
+            console.log("payloadEquipo =>", payloadEquipo);
+
+            await api.createEquipo(payloadEquipo);
 
             // 4) mostrar success
-            const selected = (polarizations || []).find((p) => p?._id === values.satelliteType);
+            const selected = (polarizations || []).find(
+              (p) => p?._id === values.satelliteType
+            );
             const polarizationName = selected?.typePolarization || "Desconocido";
 
             await Swal.fire({
@@ -170,8 +212,12 @@ const SatelliteForm = () => {
             if (satId) {
               try {
                 await api.deleteSatelliteId(satId);
+                console.warn("Rollback OK: satélite eliminado:", satId);
               } catch (rbErr) {
-                console.warn("Rollback falló (no se pudo borrar satélite):", rbErr?.response?.data || rbErr);
+                console.warn(
+                  "Rollback falló (no se pudo borrar satélite):",
+                  rbErr?.response?.data || rbErr
+                );
               }
             }
 
@@ -192,7 +238,8 @@ const SatelliteForm = () => {
 
             <div className="form__group">
               <label htmlFor="satelliteName" className="form__group-label">
-                Nombre de Satélite<br />
+                Nombre de Satélite
+                <br />
                 <Field
                   innerRef={nameInputRef}
                   type="text"
@@ -208,7 +255,8 @@ const SatelliteForm = () => {
 
             <div className="form__group">
               <label htmlFor="satelliteUrl" className="form__group-label">
-                Url web<br />
+                Url web
+                <br />
                 <Field
                   type="text"
                   className="form__group-input"
@@ -223,7 +271,8 @@ const SatelliteForm = () => {
 
             <div className="form__group">
               <label htmlFor="satelliteType" className="form__group-label">
-                Selecciona la polaridad<br />
+                Selecciona la polaridad
+                <br />
                 <Field as="select" className="form__group-input" name="satelliteType">
                   <option value={"0"}>--Seleccionar--</option>
                   {(polarizations || []).map((p) => (
