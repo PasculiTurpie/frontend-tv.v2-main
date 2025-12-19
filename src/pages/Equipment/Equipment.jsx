@@ -50,7 +50,8 @@ const Equipment = () => {
         const filtered = (tipoEquipments || []).filter(
             (t) => (t?.tipoNombre || "").trim().toLowerCase() !== "ird"
         );
-console.log(uniqueTipos)
+
+
         const seen = new Map(); // key: normalized name
         for (const t of filtered) {
             const key = (t?.tipoNombre || "").trim().toLowerCase();
@@ -61,6 +62,8 @@ console.log(uniqueTipos)
             (a.tipoNombre || "").localeCompare(b.tipoNombre || "", undefined, { sensitivity: "base" })
         );
     }, [tipoEquipments]);
+
+    console.log(uniqueTipos)
 
     return (
         <div className="outlet-main">
