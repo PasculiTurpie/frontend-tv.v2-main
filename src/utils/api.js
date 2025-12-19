@@ -310,7 +310,7 @@ class Api {
     }
 
     getTipoEquipo() {
-        return this._axios.get("/tipo-equipo").then((r) => r.data);
+        return this._axios.get("/tipo-equipo").then((r) => r);
     }
 
     deleteTipoEquipo(id) {
