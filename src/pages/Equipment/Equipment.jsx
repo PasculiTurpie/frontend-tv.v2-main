@@ -63,7 +63,7 @@ const Equipment = () => {
         );
     }, [tipoEquipments]);
 
-    console.log(uniqueTipos)
+    console.log(fetchTipos())
 
     return (
         <div className="outlet-main">
