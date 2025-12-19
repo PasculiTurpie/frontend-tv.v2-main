@@ -50,7 +50,7 @@ const Equipment = () => {
         const filtered = (tipoEquipments || []).filter(
             (t) => (t?.tipoNombre || "").trim().toLowerCase() !== "ird"
         );
-
+console.log(uniqueTipos)
         const seen = new Map(); // key: normalized name
         for (const t of filtered) {
             const key = (t?.tipoNombre || "").trim().toLowerCase();
