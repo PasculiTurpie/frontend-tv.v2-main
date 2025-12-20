@@ -46,6 +46,8 @@ const useTitanHosts = () => {
             const seenIps = new Set();
             const titanHosts = [];
 
+            console.log(equipos)
+
             for (const item of equipos) {
                 const typeNameRaw = pickFirst(
                     item?.tipoNombre?.tipoNombre,
