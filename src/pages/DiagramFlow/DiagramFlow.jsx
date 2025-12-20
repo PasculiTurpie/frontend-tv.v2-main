@@ -1,6 +1,6 @@
 // src/pages/ChannelDiagram/DiagramFlow.jsx
 import { useEffect, useState, useCallback, useMemo, useRef, useContext } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   ReactFlow,
   Background,
@@ -212,24 +212,6 @@ const getValueAtPath = (source, path = []) => {
   }, source);
 };
 
-const getNodeIrdData = (node) => {
-  if (!node || typeof node !== "object") return null;
-
-  const candidates = [
-    getValueAtPath(node, ["data", "ird"]),
-    getValueAtPath(node, ["data", "equipo", "irdRef"]),
-    getValueAtPath(node, ["data", "irdRef"]),
-    getValueAtPath(node, ["data", "equipo", "ird"]),
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate && typeof candidate === "object") {
-      return candidate;
-    }
-  }
-  return null;
-};
-
 const extractIdentifier = (value, priorityKeys = []) => {
   if (value === null || value === undefined) return null;
 
@@ -307,12 +289,6 @@ const getIrdRefIdentifier = (node) => {
   return extractIdentifier(rawNodeRef, ["_id", "id", "irdId", "ird"]);
 };
 
-const formatKeyLabel = (key) =>
-  String(key)
-    .replace(/_/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/^./, (char) => char.toUpperCase());
-
 const normalizeDetailValue = (value) => {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.trim();
@@ -320,6 +296,12 @@ const normalizeDetailValue = (value) => {
   if (typeof value === "boolean") return value ? "Sí" : "No";
   return String(value);
 };
+
+const formatKeyLabel = (key) =>
+  String(key)
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (char) => char.toUpperCase());
 
 const IRD_FIELD_MAP = [
   { key: "nombreIrd", label: "Nombre IRD" },
@@ -417,13 +399,8 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
 
   pushDetail("ID del nodo", node?.id);
 
-  if (options?.equipoId) {
-    pushDetail("ID equipo", options.equipoId);
-  }
-
-  if (options?.irdId) {
-    pushDetail("ID IRD", options.irdId);
-  }
+  if (options?.equipoId) pushDetail("ID equipo", options.equipoId);
+  if (options?.irdId) pushDetail("ID IRD", options.irdId);
 
   if (isIrd) {
     const usedKeys = new Set();
@@ -472,9 +449,7 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
             pushDetail(label, value);
           });
       } else if (parametros && typeof parametros === "object") {
-        Object.entries(parametros).forEach(([key, value]) => {
-          pushDetail(formatKeyLabel(key), value);
-        });
+        Object.entries(parametros).forEach(([key, value]) => pushDetail(formatKeyLabel(key), value));
       }
     }
   } else {
@@ -508,9 +483,7 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
           pushDetail(label, value);
         });
     } else if (parametros && typeof parametros === "object") {
-      Object.entries(parametros).forEach(([key, value]) => {
-        pushDetail(formatKeyLabel(key), value);
-      });
+      Object.entries(parametros).forEach(([key, value]) => pushDetail(formatKeyLabel(key), value));
     }
   }
 
@@ -520,11 +493,7 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
     pushDetail("Posición", `${x}, ${y}`);
   }
 
-  return {
-    title: fallbackLabel,
-    image,
-    details,
-  };
+  return { title: fallbackLabel, image, details };
 };
 
 // lado sugerido (TARGET): lado opuesto al que mira hacia el source
@@ -596,6 +565,7 @@ const buildTooltipFromEdge = (edge, sourceLabel, targetLabel) => {
 /* ============================== Componente ============================== */
 export const DiagramFlow = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { isAuth } = useContext(UserContext);
 
   const [nodes, setNodes] = useState([]);
@@ -645,6 +615,18 @@ export const DiagramFlow = () => {
     return nodeMap.get(selectedNodeId) ?? null;
   }, [nodeMap, selectedNodeId]);
 
+  // ✅ Nombre del canal para mostrar arriba del diagrama
+  const channelTitle = useMemo(() => {
+    const name =
+      dataChannel?.nameChannel ??
+      dataChannel?.nombreCanal ??
+      dataChannel?.channelName ??
+      dataChannel?.nombre ??
+      dataChannel?.name ??
+      "";
+    return String(name || "").trim() || "Diagrama del canal";
+  }, [dataChannel]);
+
   // ✅ Sidebar detail loader (IRD => getIdIrd SIEMPRE)
   useEffect(() => {
     let cancelled = false;
@@ -666,7 +648,7 @@ export const DiagramFlow = () => {
     const resolvedIrdId = irdRefId ?? irdId;
 
     // ✅ Regla: si es IRD, el ID para consultar es SOLO el del IRD
-    const idToUse = isIrdNode ? resolvedIrdId : (equipoId ?? resolvedIrdId);
+    const idToUse = isIrdNode ? resolvedIrdId : equipoId ?? resolvedIrdId;
 
     const fallbackDetail = buildSelectedNodeDetail(selectedNode, null, {
       isIrd: isIrdNode,
@@ -710,9 +692,7 @@ export const DiagramFlow = () => {
           const response = await api.getIdIrd(idToUse);
           const rawData = response?.data ?? null;
 
-          if (!rawData) {
-            throw new Error("No se encontró el IRD en la base de datos.");
-          }
+          if (!rawData) throw new Error("No se encontró el IRD en la base de datos.");
 
           data = rawData;
         } else {
@@ -741,9 +721,7 @@ export const DiagramFlow = () => {
             : "No se pudo cargar la información actualizada.",
         });
       } finally {
-        if (!cancelled) {
-          setSelectedNodeDetailLoading(false);
-        }
+        if (!cancelled) setSelectedNodeDetailLoading(false);
       }
     };
 
@@ -894,15 +872,16 @@ export const DiagramFlow = () => {
           entityId: edgeId,
           execute: async () => {
             await patchEdgeReconnectRetry(edgeId, payload);
-            if (tooltipPayload) {
-              await patchEdgeTooltipRetry(edgeId, tooltipPayload);
-            }
+            if (tooltipPayload) await patchEdgeTooltipRetry(edgeId, tooltipPayload);
             edgeLocksRef.current.delete(edgeId);
             edgeRollbackRef.current.delete(edgeId);
             setEdges((prev) =>
               prev.map((edge) =>
                 edge.id === edgeId
-                  ? { ...edge, data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) } }
+                  ? {
+                      ...edge,
+                      data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) },
+                    }
                   : edge
               )
             );
@@ -915,15 +894,16 @@ export const DiagramFlow = () => {
       (async () => {
         try {
           await patchEdgeReconnectRetry(edgeId, payload);
-          if (tooltipPayload) {
-            await patchEdgeTooltipRetry(edgeId, tooltipPayload);
-          }
+          if (tooltipPayload) await patchEdgeTooltipRetry(edgeId, tooltipPayload);
           edgeLocksRef.current.delete(edgeId);
           edgeRollbackRef.current.delete(edgeId);
           setEdges((prev) =>
             prev.map((edge) =>
               edge.id === edgeId
-                ? { ...edge, data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) } }
+                ? {
+                    ...edge,
+                    data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) },
+                  }
                 : edge
             )
           );
@@ -935,9 +915,7 @@ export const DiagramFlow = () => {
               entityId: edgeId,
               execute: async () => {
                 await patchEdgeReconnectRetry(edgeId, payload);
-                if (tooltipPayload) {
-                  await patchEdgeTooltipRetry(edgeId, tooltipPayload);
-                }
+                if (tooltipPayload) await patchEdgeTooltipRetry(edgeId, tooltipPayload);
                 edgeLocksRef.current.delete(edgeId);
                 edgeRollbackRef.current.delete(edgeId);
                 setEdges((prev) =>
@@ -956,9 +934,7 @@ export const DiagramFlow = () => {
           } else {
             edgeLocksRef.current.delete(edgeId);
             edgeRollbackRef.current.delete(edgeId);
-            if (rollback) {
-              setEdges((prev) => rollback(prev));
-            }
+            if (rollback) setEdges((prev) => rollback(prev));
             notify({ icon: "error", title: "No se pudo reconectar el enlace", timer: 2600 });
           }
         }
@@ -988,7 +964,14 @@ export const DiagramFlow = () => {
           setEdges((current) =>
             current.map((e) =>
               e.id === edgeId
-                ? { ...e, data: { ...(e.data || {}), labelPosition: originalLabelPosition, isSavingLabel: false } }
+                ? {
+                    ...e,
+                    data: {
+                      ...(e.data || {}),
+                      labelPosition: originalLabelPosition,
+                      isSavingLabel: false,
+                    },
+                  }
                 : e
             )
           );
@@ -1008,16 +991,12 @@ export const DiagramFlow = () => {
       t = setTimeout(async () => {
         try {
           const edgesPayload = {};
-          for (const [edgeId, pos] of pending.entries()) {
-            edgesPayload[edgeId] = { labelPosition: pos };
-          }
+          for (const [edgeId, pos] of pending.entries()) edgesPayload[edgeId] = { labelPosition: pos };
 
           const edgeIds = Array.from(pending.keys());
           pending.clear();
 
-          await api.patchChannelLabelPositions(id, {
-            labelPositions: { edges: edgesPayload },
-          });
+          await api.patchChannelLabelPositions(id, { labelPositions: { edges: edgesPayload } });
 
           setEdges((prev) =>
             prev.map((edge) =>
@@ -1161,7 +1140,9 @@ export const DiagramFlow = () => {
       nodeSavingRef.current.add(node.id);
       setNodes((prev) =>
         prev.map((entry) =>
-          entry.id === node.id ? { ...entry, data: { ...(entry.data || {}), savingPosition: true } } : entry
+          entry.id === node.id
+            ? { ...entry, data: { ...(entry.data || {}), savingPosition: true } }
+            : entry
         )
       );
       nodePositionDebounce.flush(node.id);
@@ -1391,6 +1372,48 @@ export const DiagramFlow = () => {
         )}
 
         <div className="outlet-main">
+          {/* ✅ Header arriba del diagrama: Título + Volver */}
+          <div
+            className="diagram-header"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 10,
+            }}
+          >
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => navigate(-1)}
+              style={{ whiteSpace: "nowrap" }}
+              aria-label="Volver atrás"
+              title="Volver atrás"
+            >
+              ← Volver
+            </button>
+
+            <h2
+              className="diagram-title"
+              style={{
+                margin: 0,
+                flex: 1,
+                textAlign: "center",
+                fontSize: 18,
+                fontWeight: 700,
+                lineHeight: 1.2,
+                padding: "4px 8px",
+              }}
+              title={channelTitle}
+            >
+              {channelTitle}
+            </h2>
+
+            {/* Spacer para mantener el título centrado */}
+            <div style={{ width: 90 }} />
+          </div>
+
           <div className="dashboard_flow">
             <div className="container__flow">
               <ReactFlow
