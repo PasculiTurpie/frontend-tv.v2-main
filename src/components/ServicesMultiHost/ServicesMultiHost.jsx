@@ -46,7 +46,7 @@ const useTitanHosts = () => {
             const seenIps = new Set();
             const titanHosts = [];
 
-            console.log(equipos)
+            
 
             for (const item of equipos) {
                 const typeNameRaw = pickFirst(
@@ -77,6 +77,8 @@ const useTitanHosts = () => {
                 });
             }
 
+            console.log(titanHosts)
+            
             titanHosts.sort((a, b) =>
                 a.label.localeCompare(b.label, undefined, {
                     numeric: true,
