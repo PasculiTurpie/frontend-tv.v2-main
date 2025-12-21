@@ -1380,6 +1380,7 @@ export const DiagramFlow = () => {
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
+              marginTop: 10,
               marginBottom: 10,
             }}
           >
