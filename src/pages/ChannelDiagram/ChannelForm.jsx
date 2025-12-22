@@ -31,6 +31,17 @@ const buildEdgeTooltip = (labelStart = "", labelEnd = "") => {
   return parts.join(" | ");
 };
 
+// ✅ Normaliza dirección: deja SOLO "ida" y "bidireccional"
+// (compatibilidad: "vuelta" / "bi" -> "bidireccional")
+const normalizeDirection = (raw) => {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "ida") return "ida";
+  if (v === "bidireccional") return "bidireccional";
+  if (v === "vuelta") return "bidireccional";
+  if (v === "bi") return "bidireccional";
+  return "ida";
+};
+
 export function toPayload(nodes = [], edges = [], viewport = null) {
   const DEFAULT_SOURCE_HANDLE = makeHandle("out", "right", 1);
   const DEFAULT_TARGET_HANDLE = makeHandle("in", "left", 1);
@@ -62,10 +73,8 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
     const labelStart = rawData.labelStart ?? edge.labelStart ?? "";
     const labelEnd = rawData.labelEnd ?? edge.labelEnd ?? "";
 
-    const direction =
-      rawData.direction === "vuelta" || rawData.direction === "bi" || rawData.direction === "ida"
-        ? rawData.direction
-        : "ida";
+    // ✅ SOLO ida o bidireccional
+    const direction = normalizeDirection(rawData.direction);
 
     const tooltipTitle = edge?.label || rawData.label || edge?.id || "";
     const tooltip = buildEdgeTooltip(labelStart, labelEnd);
@@ -164,9 +173,10 @@ const defaultFormikValues = {
   edgeLabelEnd: "",
 };
 
+// ✅ SELECT DIRECCIÓN: dejar SOLO ida + bidireccional (reemplaza vuelta)
 const EDGE_DIR_OPTIONS = [
   { value: "ida", label: "Ida (source → target)" },
-  { value: "vuelta", label: "Vuelta (target ← source)" },
+  { value: "bidireccional", label: "Bidireccional (↔)" },
 ];
 
 /** 🎨 Paleta de colores para enlaces (hex) */
@@ -181,7 +191,8 @@ const EDGE_COLOR_OPTIONS = [
   { value: "#111827", label: "Negro" },
 ];
 
-const defaultEdgeColorByDir = (dir) => (dir === "vuelta" ? "#22c55e" : "#3b82f6");
+// ✅ default por dirección (bidireccional usa el "vuelta" antiguo)
+const defaultEdgeColorByDir = (dir) => (dir === "bidireccional" ? "#22c55e" : "#3b82f6");
 
 const FormValuesObserver = ({ onChange }) => {
   const { values } = useFormikContext();
@@ -241,7 +252,10 @@ const insertEquipoIntoGroupedOptions = (grouped, option) => {
   return next;
 };
 
-function pickHandlesByGeometry(srcNode, tgtNode, direction) {
+function pickHandlesByGeometry(srcNode, tgtNode, directionRaw) {
+  // ✅ normalizamos por si viene algo viejo
+  const direction = normalizeDirection(directionRaw);
+
   const srcTipo =
     inferNodeHandleType(srcNode) || tipoToKey(srcNode?.data?.equipo?.tipoNombre?.tipoNombre);
   if (srcTipo === "satelite") {
@@ -272,17 +286,17 @@ function pickHandlesByGeometry(srcNode, tgtNode, direction) {
     };
   };
 
+  // ✅ Bidireccional: mantiene tu lógica antigua de "vuelta" (handles invertidos)
   if (sameX && sy !== ty) {
     const srcIsUpper = sy < ty;
     if (direction === "ida") {
       return srcIsUpper
         ? ensureByType(HANDLE_IDS.OUT_BOTTOM_PRIMARY, HANDLE_IDS.IN_TOP_PRIMARY)
         : ensureByType(HANDLE_IDS.OUT_TOP_PRIMARY, HANDLE_IDS.IN_BOTTOM_PRIMARY);
-    } else {
-      return srcIsUpper
-        ? ensureByType(HANDLE_IDS.OUT_BOTTOM_SECONDARY, HANDLE_IDS.IN_TOP_SECONDARY)
-        : ensureByType(HANDLE_IDS.OUT_TOP_SECONDARY, HANDLE_IDS.IN_BOTTOM_SECONDARY);
     }
+    return srcIsUpper
+      ? ensureByType(HANDLE_IDS.OUT_BOTTOM_SECONDARY, HANDLE_IDS.IN_TOP_SECONDARY)
+      : ensureByType(HANDLE_IDS.OUT_TOP_SECONDARY, HANDLE_IDS.IN_BOTTOM_SECONDARY);
   }
 
   return direction === "ida"
@@ -377,7 +391,17 @@ const ChannelForm = () => {
       if (stored?.selectedIdEquipo) setSelectedIdEquipo(stored.selectedIdEquipo);
       if (stored?.selectedEquipoTipo) setSelectedEquipoTipo(stored.selectedEquipoTipo);
       if (Array.isArray(stored?.draftNodes)) setDraftNodes(stored.draftNodes);
-      if (Array.isArray(stored?.draftEdges)) setDraftEdges(stored.draftEdges);
+
+      // ✅ normaliza direcciones al restaurar edges (vuelta/bi -> bidireccional)
+      if (Array.isArray(stored?.draftEdges)) {
+        const restoredEdges = stored.draftEdges.map((e) => {
+          const d = e?.data || {};
+          const dir = normalizeDirection(d.direction);
+          return { ...e, data: { ...d, direction: dir } };
+        });
+        setDraftEdges(restoredEdges);
+      }
+
       if (stored?.edgeSourceSel) setEdgeSourceSel(stored.edgeSourceSel);
       if (stored?.edgeTargetSel) setEdgeTargetSel(stored.edgeTargetSel);
 
@@ -390,7 +414,7 @@ const ChannelForm = () => {
 
       const dirValue = stored?.edgeDirectionValue || stored?.edgeDirection?.value;
       if (dirValue) {
-        const dirOpt = EDGE_DIR_OPTIONS.find((opt) => opt.value === dirValue);
+        const dirOpt = EDGE_DIR_OPTIONS.find((opt) => opt.value === normalizeDirection(dirValue));
         if (dirOpt) setEdgeDirection(dirOpt);
 
         if (!storedColor && !stored?.edgeColorSel) {
@@ -494,9 +518,16 @@ const ChannelForm = () => {
         const { nodes: normalizedNodes, edges: normalizedEdges } = prepareDiagramState(diagram);
         if (!active) return;
 
+        // ✅ normaliza direcciones cargadas desde API
+        const fixedEdges = (normalizedEdges || []).map((e) => {
+          const d = e?.data || {};
+          const dir = normalizeDirection(d.direction);
+          return { ...e, data: { ...d, direction: dir } };
+        });
+
         setCurrentChannel(diagram);
         setDraftNodes(normalizedNodes);
-        setDraftEdges(normalizedEdges);
+        setDraftEdges(fixedEdges);
         setEdgeSourceSel(null);
         setEdgeTargetSel(null);
         setEdgeDirection(EDGE_DIR_OPTIONS[0]);
@@ -537,7 +568,10 @@ const ChannelForm = () => {
       setSignalsLoading(true);
       setSignalsError(null);
       try {
-        const [signalsRes, channelsRes] = await Promise.all([api.getSignal(), api.listChannelDiagrams()]);
+        const [signalsRes, channelsRes] = await Promise.all([
+          api.getSignal(),
+          api.listChannelDiagrams(),
+        ]);
 
         const signals = Array.isArray(signalsRes?.data) ? signalsRes.data : [];
         const channels = Array.isArray(channelsRes?.data) ? channelsRes.data : [];
@@ -570,7 +604,9 @@ const ChannelForm = () => {
         const unusedSignals = signals.filter((s) => !usedSet.has(toId(s?._id)));
 
         let options = unusedSignals.map((opt) => ({
-          label: `${opt.nameChannel ?? opt.nombre ?? "Sin nombre"} - ${opt.tipoTecnologia ?? opt.tipo ?? ""}`.trim(),
+          label: `${opt.nameChannel ?? opt.nombre ?? "Sin nombre"} - ${
+            opt.tipoTecnologia ?? opt.tipo ?? ""
+          }`.trim(),
           value: opt._id,
           raw: opt,
         }));
@@ -701,7 +737,10 @@ const ChannelForm = () => {
     if (!equiposLoaded || !allEquipoOptions.length) return;
 
     setOptionSelectEquipo((prev) => {
-      let next = allEquipoOptions.map((group) => ({ label: group.label, options: [...(group.options || [])] }));
+      let next = allEquipoOptions.map((group) => ({
+        label: group.label,
+        options: [...(group.options || [])],
+      }));
 
       draftNodes.forEach((node) => {
         const equipoId = node?.data?.equipoId;
@@ -746,11 +785,18 @@ const ChannelForm = () => {
       setDraftNodes(remainingNodes);
 
       const removedEdgesIds = new Set();
-      const remainingEdges = draftEdges.filter((e) => {
-        const touches = String(e.source) === String(nodeId) || String(e.target) === String(nodeId);
-        if (touches) removedEdgesIds.add(e.id);
-        return !touches;
-      });
+      const remainingEdges = draftEdges
+        .filter((e) => {
+          const touches = String(e.source) === String(nodeId) || String(e.target) === String(nodeId);
+          if (touches) removedEdgesIds.add(e.id);
+          return !touches;
+        })
+        .map((e) => {
+          // ✅ asegura normalización por si venían viejos
+          const d = e?.data || {};
+          return { ...e, data: { ...d, direction: normalizeDirection(d.direction) } };
+        });
+
       setDraftEdges(remainingEdges);
 
       setEdgeSourceSel((prev) => (prev?.value === nodeId ? null : prev));
@@ -1048,7 +1094,9 @@ const ChannelForm = () => {
               html: `
                 <div style="text-align:left">
                   <div><b>Status:</b> ${e?.response?.status || "?"}</div>
-                  <div><b>Mensaje:</b> ${data?.message || data?.error || e.message || "Error desconocido"}</div>
+                  <div><b>Mensaje:</b> ${
+                    data?.message || data?.error || e.message || "Error desconocido"
+                  }</div>
                   ${data?.missing ? `<div><b>Faltan:</b> ${JSON.stringify(data.missing)}</div>` : ""}
                   ${data?.errors ? `<pre>${JSON.stringify(data.errors, null, 2)}</pre>` : ""}
                 </div>
@@ -1068,7 +1116,13 @@ const ChannelForm = () => {
               <legend className="chf__legend">Señal</legend>
 
               {signalsLoading ? (
-                <Select className="select-width" isLoading isDisabled placeholder="Cargando señales…" styles={selectStyles} />
+                <Select
+                  className="select-width"
+                  isLoading
+                  isDisabled
+                  placeholder="Cargando señales…"
+                  styles={selectStyles}
+                />
               ) : signalsError ? (
                 <div className="chf__alert chf__alert--error">
                   <strong>Error al cargar señales.</strong>
@@ -1082,7 +1136,11 @@ const ChannelForm = () => {
                 <div className="chf__empty">
                   <h4>No hay señales disponibles</h4>
                   <p>Todas las señales ya están vinculadas a un diagrama. Crea una nueva señal para continuar.</p>
-                  <button type="button" className="chf__btn chf__btn--primary" onClick={() => navigate("/signals/new")}>
+                  <button
+                    type="button"
+                    className="chf__btn chf__btn--primary"
+                    onClick={() => navigate("/signals/new")}
+                  >
                     + Crear nueva señal
                   </button>
                 </div>
@@ -1109,9 +1167,17 @@ const ChannelForm = () => {
 
             {/* ---- Nodo ---- */}
             <fieldset className="chf__fieldset">
-              <legend className="chf__legend" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <legend
+                className="chf__legend"
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+              >
                 <span>Agregar nodo</span>
-                <button type="button" className="chf__btn chf__btn--secondary" onClick={handleClearAll} title="Vaciar nodos/edges y restaurar equipos">
+                <button
+                  type="button"
+                  className="chf__btn chf__btn--secondary"
+                  onClick={handleClearAll}
+                  title="Vaciar nodos/edges y restaurar equipos"
+                >
                   🧹 Vaciar todo
                 </button>
               </legend>
@@ -1124,7 +1190,15 @@ const ChannelForm = () => {
 
                 <label className="chf__label">
                   Equipo
-                  <Select className="chf__select" name="equipo" placeholder="Equipos" options={optionsSelectEquipo} onChange={handleSelectedEquipo} value={selectedEquipoOption} styles={selectStyles} />
+                  <Select
+                    className="chf__select"
+                    name="equipo"
+                    placeholder="Equipos"
+                    options={optionsSelectEquipo}
+                    onChange={handleSelectedEquipo}
+                    value={selectedEquipoOption}
+                    styles={selectStyles}
+                  />
                 </label>
 
                 <label className="chf__label">
@@ -1165,11 +1239,14 @@ const ChannelForm = () => {
                     };
 
                     if (draftNodes.some((n) => n.id === node.id)) {
-                      return Swal.fire({ icon: "warning", title: "Nodo duplicado", text: `Ya existe un nodo con id "${node.id}".` });
+                      return Swal.fire({
+                        icon: "warning",
+                        title: "Nodo duplicado",
+                        text: `Ya existe un nodo con id "${node.id}".`,
+                      });
                     }
 
                     setDraftNodes((prev) => [...prev, node]);
-
                     setOptionSelectEquipo((prev) => removeEquipoFromGroupedOptions(prev, selectedEquipoValue));
 
                     setSelectedEquipoValue(null);
@@ -1189,12 +1266,21 @@ const ChannelForm = () => {
               {draftNodes.length > 0 && (
                 <ul className="chf__list">
                   {draftNodes.map((n) => (
-                    <li key={n.id} className="chf__list-item" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <li
+                      key={n.id}
+                      className="chf__list-item"
+                      style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+                    >
                       <div style={{ flex: "1 1 auto" }}>
                         <code>{n.id}</code> — {n.data?.label} — {n.data?.equipoNombre}{" "}
                         <span className="chf__badge">{n.data?.equipoTipo || "-"}</span>
                       </div>
-                      <button type="button" className="chf__btn chf__btn--danger" onClick={() => handleRemoveNode(n.id)} title="Eliminar nodo y devolver equipo">
+                      <button
+                        type="button"
+                        className="chf__btn chf__btn--danger"
+                        onClick={() => handleRemoveNode(n.id)}
+                        title="Eliminar nodo y devolver equipo"
+                      >
                         🗑 Eliminar
                       </button>
                     </li>
@@ -1247,6 +1333,7 @@ const ChannelForm = () => {
                   />
                 </label>
 
+                {/* ✅ SELECT DIRECCIÓN MODIFICADO */}
                 <label className="chf__label">
                   Dirección
                   <Select
@@ -1254,12 +1341,16 @@ const ChannelForm = () => {
                     options={EDGE_DIR_OPTIONS}
                     value={edgeDirection}
                     onChange={(opt) => {
-                      setEdgeDirection(opt);
+                      const safeOpt =
+                        EDGE_DIR_OPTIONS.find((o) => o.value === normalizeDirection(opt?.value)) ||
+                        EDGE_DIR_OPTIONS[0];
+
+                      setEdgeDirection(safeOpt);
 
                       const maybeDefault = EDGE_COLOR_OPTIONS[0]?.value;
                       const isUsingFirstDefault = (edgeColorSel?.value || "") === (maybeDefault || "");
                       if (isUsingFirstDefault) {
-                        const def = defaultEdgeColorByDir(opt?.value);
+                        const def = defaultEdgeColorByDir(safeOpt?.value);
                         const defOpt = EDGE_COLOR_OPTIONS.find((c) => c.value === def);
                         if (defOpt) setEdgeColorSel(defOpt);
                       }
@@ -1358,7 +1449,8 @@ const ChannelForm = () => {
                       });
                     }
 
-                    const dir = edgeDirection.value;
+                    // ✅ ahora SOLO ida o bidireccional
+                    const dir = normalizeDirection(edgeDirection?.value);
 
                     // ✅ Color elegido (o default por dirección)
                     const color = edgeColorSel?.value || defaultEdgeColorByDir(dir);
@@ -1381,18 +1473,15 @@ const ChannelForm = () => {
                       targetHandle: handleByDir.targetHandle,
                       label: trimmedLabel || id,
 
-                      // ✅ CLAVE: usa tu edge custom (el que dibuja marker heredando color)
+                      // ✅ edge custom
                       type: "customDirectional",
 
-                      // ✅ color queda en stroke, y el marker heredará ese color
+                      // ✅ color
                       style: { stroke: color, strokeWidth: 2 },
-
-                      // ⛔️ Opción B: NO mandamos markerEnd aquí
-                      // markerEnd: ...
 
                       data: {
                         direction: dir,
-                        color, // ✅ persistimos color para tooltip/listado/fallback
+                        color,
                         label: trimmedLabel || id,
                         labelStart: labelStart || "",
                         labelEnd: labelEnd || "",
@@ -1409,12 +1498,14 @@ const ChannelForm = () => {
                     }
 
                     setDraftEdges((prev) => [...prev, edge]);
+
                     setFieldValue("edgeId", "");
                     setFieldValue("source", "");
                     setFieldValue("target", "");
                     setFieldValue("edgeLabel", "");
                     setFieldValue("edgeLabelStart", "");
                     setFieldValue("edgeLabelEnd", "");
+
                     setEdgeSourceSel(null);
                     setEdgeTargetSel(null);
                     setEdgeDirection(EDGE_DIR_OPTIONS[0]);
@@ -1432,9 +1523,14 @@ const ChannelForm = () => {
                     const labelStart = e?.data?.labelStart || e?.data?.endpointLabels?.source || "";
                     const labelEnd = e?.data?.labelEnd || e?.data?.endpointLabels?.target || "";
                     const edgeColor = e?.data?.color || e?.style?.stroke || "#475569";
+                    const dir = normalizeDirection(e?.data?.direction);
 
                     return (
-                      <li key={e.id} className="chf__list-item" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <li
+                        key={e.id}
+                        className="chf__list-item"
+                        style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+                      >
                         <div style={{ flex: "1 1 auto" }}>
                           <code>{e.id}</code> — {e.source} ({e.sourceHandle}) → {e.target} ({e.targetHandle}) — {label}
                           {labelStart ? <span className="chf__badge chf__badge--muted">ini: {labelStart}</span> : null}
@@ -1455,11 +1551,16 @@ const ChannelForm = () => {
                           />
 
                           <span className="chf__muted" style={{ marginLeft: 8, color: edgeColor }}>
-                            {e.data?.direction}
+                            {dir}
                           </span>
                         </div>
 
-                        <button type="button" className="chf__btn chf__btn--danger" onClick={() => handleRemoveEdge(e.id)} title="Eliminar enlace">
+                        <button
+                          type="button"
+                          className="chf__btn chf__btn--danger"
+                          onClick={() => handleRemoveEdge(e.id)}
+                          title="Eliminar enlace"
+                        >
                           🗑 Eliminar
                         </button>
                       </li>
@@ -1474,7 +1575,13 @@ const ChannelForm = () => {
                 className="chf__btn chf__btn--primary"
                 type="submit"
                 disabled={!selectedValue || (isEditMode && loadingChannel)}
-                title={!selectedValue ? "Seleccione una señal para continuar" : isEditMode ? "Actualizar flujo" : "Crear flujo"}
+                title={
+                  !selectedValue
+                    ? "Seleccione una señal para continuar"
+                    : isEditMode
+                    ? "Actualizar flujo"
+                    : "Crear flujo"
+                }
                 onClick={!isEditMode ? handleCreateFlowClick : undefined}
               >
                 {isEditMode ? "Actualizar flujo" : "Crear flujo"}

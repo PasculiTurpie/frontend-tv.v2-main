@@ -18,7 +18,7 @@ export default function DraggableDirectionalEdge(props) {
     style,
     data = {},
     label,
-    markerEnd, // ✅ viene desde DiagramFlow/ReactFlow si existe
+    markerEnd,
   } = props;
 
   const isSaving = Boolean(data?.isSaving);
@@ -44,7 +44,7 @@ export default function DraggableDirectionalEdge(props) {
     const hasStart = Boolean(start);
     const hasEnd = Boolean(end);
 
-    if (hasStart && hasEnd) return `${start} → ${end}`;
+    if (hasStart && hasEnd) return `${start} ↔ ${end}`;
     if (hasStart || hasEnd) return start || end;
     return "";
   };
@@ -53,9 +53,9 @@ export default function DraggableDirectionalEdge(props) {
   const tooltipBody = data?.tooltip || buildTooltipFromData(data);
 
   /* --------------------------- Color --------------------------- */
-  const direction = data?.direction ?? "ida";
+  const direction = data?.direction ?? "ida"; // ida | bidireccional
 
-  // ✅ Toma prioridad el color del markerEnd si viene desde ReactFlow/DiagramFlow
+  // ✅ Prioriza markerEnd.color si viene desde ReactFlow/DiagramFlow
   const chosenColor =
     markerEnd?.color ||
     data?.color ||
@@ -68,20 +68,24 @@ export default function DraggableDirectionalEdge(props) {
     ...style,
   };
 
-  /* -------------------- Marker heredando color (SOLIDO) -------------------- */
-  const markerId = useMemo(() => {
-    const safe = String(id || "edge").replace(/[^a-zA-Z0-9_-]/g, "_");
-    return `arrowclosed_${safe}`;
-  }, [id]);
+  /* -------------------- Markers sólidos (rellenos) -------------------- */
+  const safeId = useMemo(
+    () => String(id || "edge").replace(/[^a-zA-Z0-9_-]/g, "_"),
+    [id]
+  );
 
-  const markerUrl = `url(#${markerId})`;
+  const markerEndId = `arrow_end_${safeId}`;
+  const markerStartId = `arrow_start_${safeId}`;
+
+  const markerEndUrl = `url(#${markerEndId})`;
+  const markerStartUrl = `url(#${markerStartId})`;
 
   /* --------------------------- Tooltip (Portal) --------------------------- */
   const hideTimerRef = useRef(null);
   const [hover, setHover] = useState(false);
   const [sticky, setSticky] = useState(false);
 
-  // ✅ posición del tooltip en pantalla (clientX/clientY)
+  // posición del tooltip en pantalla
   const [tipScreen, setTipScreen] = useState({ left: 0, top: 0 });
 
   const clearHideTimer = () => {
@@ -95,7 +99,6 @@ export default function DraggableDirectionalEdge(props) {
     clearHideTimer();
     setHover(true);
 
-    // ✅ si viene evento (mouse), ancla al punto exacto sobre el edge
     if (evt?.clientX != null && evt?.clientY != null) {
       setTipScreen({ left: evt.clientX, top: evt.clientY });
     }
@@ -112,7 +115,6 @@ export default function DraggableDirectionalEdge(props) {
     return () => clearHideTimer();
   }, []);
 
-  // ✅ mientras no esté sticky, el tooltip sigue al mouse sobre el edge
   const handleMouseMove = useCallback(
     (evt) => {
       if (sticky) return;
@@ -135,7 +137,7 @@ export default function DraggableDirectionalEdge(props) {
             onMouseLeave={hideTooltipDelayed}
             onClick={(e) => {
               e.stopPropagation();
-              setSticky((v) => !v); // click = fija / libera
+              setSticky((v) => !v);
             }}
             role="tooltip"
           >
@@ -161,37 +163,47 @@ export default function DraggableDirectionalEdge(props) {
   /* ----------------------- Render del Edge ----------------------- */
   return (
     <>
-      {/* ✅ Marker en el mismo SVG del Edge (NO svg separado) */}
       <defs>
-  <marker
-    id={markerId}
-    markerWidth="12"
-    markerHeight="12"
-    viewBox="0 0 12 12"
-    refX="10"
-    refY="6"
-    orient="auto"
-    markerUnits="strokeWidth"
-  >
-    <path
-      d="M 2 2 L 10 6 L 2 10 Z"
-      fill={chosenColor}
-      stroke="none"
-    />
-  </marker>
-</defs>
+        {/* Flecha final */}
+        <marker
+          id={markerEndId}
+          markerWidth="12"
+          markerHeight="12"
+          viewBox="0 0 12 12"
+          refX="10"
+          refY="6"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M 2 2 L 10 6 L 2 10 Z" fill={chosenColor} stroke="none" />
+        </marker>
 
+        {/* Flecha inicial (solo bidireccional) */}
+        <marker
+          id={markerStartId}
+          markerWidth="12"
+          markerHeight="12"
+          viewBox="0 0 12 12"
+          refX="2"
+          refY="6"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M 10 2 L 2 6 L 10 10 Z" fill={chosenColor} stroke="none" />
+        </marker>
+      </defs>
 
       {/* Línea visible */}
       <path
         d={edgePath}
         fill="none"
         style={animatedStyle}
-        markerEnd={markerUrl}
         className="edge-stroke-animated"
+        markerEnd={markerEndUrl}
+        markerStart={direction === "bidireccional" ? markerStartUrl : undefined}
       />
 
-      {/* ✅ Path invisible para hover + seguimiento del mouse */}
+      {/* Path invisible para hover + seguimiento del mouse */}
       <path
         d={edgePath}
         fill="none"
@@ -201,7 +213,6 @@ export default function DraggableDirectionalEdge(props) {
         onMouseMove={handleMouseMove}
         onMouseLeave={hideTooltipDelayed}
         onClick={(e) => {
-          // ✅ click sobre el edge: fija / libera
           e.stopPropagation();
           showTooltip(e);
           setSticky((v) => !v);
@@ -223,7 +234,6 @@ export default function DraggableDirectionalEdge(props) {
         </foreignObject>
       )}
 
-      {/* ✅ Tooltip real (Portal) */}
       {tooltipPortal}
     </>
   );

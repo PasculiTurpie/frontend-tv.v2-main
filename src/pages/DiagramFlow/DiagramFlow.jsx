@@ -15,11 +15,7 @@ import "@xyflow/react/dist/style.css";
 import api from "../../utils/api";
 import "./DiagramFlow.css";
 import Swal from "sweetalert2";
-import {
-  createKeyedDebounce,
-  withRetry,
-  prepareOptimisticUpdate,
-} from "../../utils/asyncUtils";
+import { createKeyedDebounce, withRetry, prepareOptimisticUpdate } from "../../utils/asyncUtils";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import { HANDLE_CONFIG, makeHandleId } from "../../config/handles.config";
 
@@ -179,30 +175,9 @@ const IRD_ID_PATHS = [
   ["ird"],
 ];
 
-const EQUIPO_ID_KEYS = [
-  "_id",
-  "id",
-  "equipoId",
-  "equipoID",
-  "equipo",
-  "idEquipo",
-  "id_equipo",
-  "value",
-  "key",
-];
+const EQUIPO_ID_KEYS = ["_id", "id", "equipoId", "equipoID", "equipo", "idEquipo", "id_equipo", "value", "key"];
 
-const IRD_ID_KEYS = [
-  "_id",
-  "id",
-  "irdId",
-  "irdID",
-  "ird",
-  "idIrd",
-  "id_ird",
-  "irdRef",
-  "value",
-  "key",
-];
+const IRD_ID_KEYS = ["_id", "id", "irdId", "irdID", "ird", "idIrd", "id_ird", "irdRef", "value", "key"];
 
 const getValueAtPath = (source, path = []) => {
   if (!source || typeof source !== "object") return undefined;
@@ -220,9 +195,7 @@ const extractIdentifier = (value, priorityKeys = []) => {
     return normalized ? normalized : null;
   }
 
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
+  if (typeof value === "boolean") return value ? "true" : "false";
 
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -449,7 +422,9 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
             pushDetail(label, value);
           });
       } else if (parametros && typeof parametros === "object") {
-        Object.entries(parametros).forEach(([key, value]) => pushDetail(formatKeyLabel(key), value));
+        Object.entries(parametros).forEach(([key, value]) =>
+          pushDetail(formatKeyLabel(key), value)
+        );
       }
     }
   } else {
@@ -464,7 +439,10 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
 
     pushDetail("Nombre", mergedEquipo?.nombre ?? fallbackLabel);
     pushDetail("Tipo de equipo", tipo);
-    pushDetail("IP de gestión", mergedEquipo?.ip_gestion ?? mergedEquipo?.ipGestion ?? mergedEquipo?.ip);
+    pushDetail(
+      "IP de gestión",
+      mergedEquipo?.ip_gestion ?? mergedEquipo?.ipGestion ?? mergedEquipo?.ip
+    );
     pushDetail("Marca", mergedEquipo?.marca ?? mergedEquipo?.brand);
     pushDetail("Modelo", mergedEquipo?.modelo ?? mergedEquipo?.model);
     pushDetail("N° de serie", mergedEquipo?.serie ?? mergedEquipo?.serial);
@@ -483,11 +461,16 @@ const buildSelectedNodeDetail = (node, apiData, options = {}) => {
           pushDetail(label, value);
         });
     } else if (parametros && typeof parametros === "object") {
-      Object.entries(parametros).forEach(([key, value]) => pushDetail(formatKeyLabel(key), value));
+      Object.entries(parametros).forEach(([key, value]) =>
+        pushDetail(formatKeyLabel(key), value)
+      );
     }
   }
 
-  if (node?.position && (typeof node.position.x === "number" || typeof node.position.y === "number")) {
+  if (
+    node?.position &&
+    (typeof node.position.x === "number" || typeof node.position.y === "number")
+  ) {
     const x = Number.isFinite(node.position.x) ? Math.round(node.position.x) : node.position.x;
     const y = Number.isFinite(node.position.y) ? Math.round(node.position.y) : node.position.y;
     pushDetail("Posición", `${x}, ${y}`);
@@ -578,6 +561,9 @@ export const DiagramFlow = () => {
   const [selectedNodeDetailLoading, setSelectedNodeDetailLoading] = useState(false);
   const [selectedNodeDetailMessage, setSelectedNodeDetailMessage] = useState(null);
 
+  // ✅ NUEVO: edge seleccionado (para poblar selects en ChannelForm, etc.)
+  const [selectedEdge, setSelectedEdge] = useState(null);
+
   const nodeOriginalPositionRef = useRef(new Map());
   const nodeSavingRef = useRef(new Set());
   const nodeRollbackRef = useRef(new Map());
@@ -605,15 +591,20 @@ export const DiagramFlow = () => {
   }, [nodes]);
 
   useEffect(() => {
-    if (selectedNodeId && !nodeMap.has(selectedNodeId)) {
-      setSelectedNodeId(null);
-    }
+    if (selectedNodeId && !nodeMap.has(selectedNodeId)) setSelectedNodeId(null);
   }, [nodeMap, selectedNodeId]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null;
     return nodeMap.get(selectedNodeId) ?? null;
   }, [nodeMap, selectedNodeId]);
+
+  // ✅ Si el edge seleccionado ya no existe, lo limpiamos
+  useEffect(() => {
+    if (!selectedEdge) return;
+    const exists = edges.some((e) => e.id === selectedEdge.id);
+    if (!exists) setSelectedEdge(null);
+  }, [edges, selectedEdge]);
 
   // ✅ Nombre del canal para mostrar arriba del diagrama
   const channelTitle = useMemo(() => {
@@ -691,9 +682,7 @@ export const DiagramFlow = () => {
         if (isIrdNode) {
           const response = await api.getIdIrd(idToUse);
           const rawData = response?.data ?? null;
-
           if (!rawData) throw new Error("No se encontró el IRD en la base de datos.");
-
           data = rawData;
         } else {
           const response = await api.getIdEquipo(idToUse);
@@ -734,19 +723,33 @@ export const DiagramFlow = () => {
 
   const handleNodeClick = useCallback((_, node) => {
     if (!node || !node.id) return;
+    // (opcional) si haces click en nodo, limpia edge seleccionado
+    setSelectedEdge(null);
     setSelectedNodeId((prev) => (prev === node.id ? null : node.id));
+  }, []);
+
+  // ✅ NUEVO: click en edge
+  const handleEdgeClick = useCallback((evt, edge) => {
+    evt.stopPropagation();
+    // (opcional) al seleccionar edge, cerrar sidebar de nodo
+    setSelectedNodeId(null);
+    setSelectedEdge(edge);
+
+    // ✅ (opcional pero recomendado) persistir para que ChannelForm lo lea
+    // localStorage.setItem("rf:selectedEdge", JSON.stringify(edge));
   }, []);
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedEdge(null);
   }, []);
 
   const patchNodePositionRetry = useMemo(
     () =>
-      withRetry(
-        (nodeId, position) => api.patchChannelNodePosition(id, nodeId, position),
-        { retries: 2, baseDelay: 180 }
-      ),
+      withRetry((nodeId, position) => api.patchChannelNodePosition(id, nodeId, position), {
+        retries: 2,
+        baseDelay: 180,
+      }),
     [id]
   );
 
@@ -878,10 +881,7 @@ export const DiagramFlow = () => {
             setEdges((prev) =>
               prev.map((edge) =>
                 edge.id === edgeId
-                  ? {
-                      ...edge,
-                      data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) },
-                    }
+                  ? { ...edge, data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) } }
                   : edge
               )
             );
@@ -900,10 +900,7 @@ export const DiagramFlow = () => {
           setEdges((prev) =>
             prev.map((edge) =>
               edge.id === edgeId
-                ? {
-                    ...edge,
-                    data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) },
-                  }
+                ? { ...edge, data: { ...(edge.data || {}), isSaving: false, ...(tooltipPayload || {}) } }
                 : edge
             )
           );
@@ -1000,9 +997,7 @@ export const DiagramFlow = () => {
 
           setEdges((prev) =>
             prev.map((edge) =>
-              edgeIds.includes(edge.id)
-                ? { ...edge, data: { ...(edge.data || {}), isSavingLabel: false } }
-                : edge
+              edgeIds.includes(edge.id) ? { ...edge, data: { ...(edge.data || {}), isSavingLabel: false } } : edge
             )
           );
 
@@ -1140,9 +1135,7 @@ export const DiagramFlow = () => {
       nodeSavingRef.current.add(node.id);
       setNodes((prev) =>
         prev.map((entry) =>
-          entry.id === node.id
-            ? { ...entry, data: { ...(entry.data || {}), savingPosition: true } }
-            : entry
+          entry.id === node.id ? { ...entry, data: { ...(entry.data || {}), savingPosition: true } } : entry
         )
       );
       nodePositionDebounce.flush(node.id);
@@ -1353,7 +1346,9 @@ export const DiagramFlow = () => {
   if (loading) return <p>Cargando diagrama...</p>;
   if (error) return <p>{error}</p>;
 
-  const wrapperClassName = `diagram-flow-wrapper${selectedNode ? " diagram-flow-wrapper--with-sidebar" : ""}`;
+  const wrapperClassName = `diagram-flow-wrapper${
+    selectedNode ? " diagram-flow-wrapper--with-sidebar" : ""
+  }`;
 
   return (
     <ErrorBoundary
@@ -1425,6 +1420,7 @@ export const DiagramFlow = () => {
                 onNodesChange={onNodesChange}
                 onNodeDragStop={onNodeDragStop}
                 onNodeClick={handleNodeClick}
+                onEdgeClick={handleEdgeClick} // ✅ AQUÍ ESTÁ
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 onReconnect={onEdgeUpdate}
