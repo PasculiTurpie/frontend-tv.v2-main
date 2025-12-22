@@ -31,14 +31,14 @@ const buildEdgeTooltip = (labelStart = "", labelEnd = "") => {
   return parts.join(" | ");
 };
 
-// ✅ Normaliza dirección: deja SOLO "ida" y "bidireccional"
-// (compatibilidad: "vuelta" / "bi" -> "bidireccional")
+// ✅ Normaliza dirección: guarda SIEMPRE en DB como "ida" | "vuelta" | "bi"
+// Compatibilidad: "bidireccional" => "bi"
 const normalizeDirection = (raw) => {
   const v = String(raw || "").trim().toLowerCase();
   if (v === "ida") return "ida";
-  if (v === "bidireccional") return "bidireccional";
-  if (v === "vuelta") return "bidireccional";
-  if (v === "bi") return "bidireccional";
+  if (v === "vuelta") return "vuelta";
+  if (v === "bi") return "bi";
+  if (v === "bidireccional") return "bi";
   return "ida";
 };
 
@@ -73,7 +73,7 @@ export function toPayload(nodes = [], edges = [], viewport = null) {
     const labelStart = rawData.labelStart ?? edge.labelStart ?? "";
     const labelEnd = rawData.labelEnd ?? edge.labelEnd ?? "";
 
-    // ✅ SOLO ida o bidireccional
+    // ✅ Guarda SOLO ida / vuelta / bi (con compatibilidad bidireccional -> bi)
     const direction = normalizeDirection(rawData.direction);
 
     const tooltipTitle = edge?.label || rawData.label || edge?.id || "";
@@ -173,10 +173,10 @@ const defaultFormikValues = {
   edgeLabelEnd: "",
 };
 
-// ✅ SELECT DIRECCIÓN: dejar SOLO ida + bidireccional (reemplaza vuelta)
+// ✅ SELECT DIRECCIÓN: deja SOLO ida + bi (se guarda como "bi" en DB)
 const EDGE_DIR_OPTIONS = [
   { value: "ida", label: "Ida (source → target)" },
-  { value: "bidireccional", label: "Bidireccional (↔)" },
+  { value: "bi", label: "Bidireccional (↔)" },
 ];
 
 /** 🎨 Paleta de colores para enlaces (hex) */
@@ -191,8 +191,9 @@ const EDGE_COLOR_OPTIONS = [
   { value: "#111827", label: "Negro" },
 ];
 
-// ✅ default por dirección (bidireccional usa el "vuelta" antiguo)
-const defaultEdgeColorByDir = (dir) => (dir === "bidireccional" ? "#22c55e" : "#3b82f6");
+// ✅ default por dirección (bi usa el "verde")
+const defaultEdgeColorByDir = (dir) =>
+  normalizeDirection(dir) === "bi" ? "#22c55e" : "#3b82f6";
 
 const FormValuesObserver = ({ onChange }) => {
   const { values } = useFormikContext();
@@ -253,7 +254,7 @@ const insertEquipoIntoGroupedOptions = (grouped, option) => {
 };
 
 function pickHandlesByGeometry(srcNode, tgtNode, directionRaw) {
-  // ✅ normalizamos por si viene algo viejo
+  // ✅ normalizamos por si viene algo viejo (bidireccional -> bi)
   const direction = normalizeDirection(directionRaw);
 
   const srcTipo =
@@ -286,7 +287,7 @@ function pickHandlesByGeometry(srcNode, tgtNode, directionRaw) {
     };
   };
 
-  // ✅ Bidireccional: mantiene tu lógica antigua de "vuelta" (handles invertidos)
+  // ✅ "bi": mantiene tu lógica antigua de "vuelta" (handles invertidos)
   if (sameX && sy !== ty) {
     const srcIsUpper = sy < ty;
     if (direction === "ida") {
@@ -358,7 +359,7 @@ const ChannelForm = () => {
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch (err) {
-      console.warn("No se pudo limpiar el borrador del formulario:", err);
+      console.warn("No se pudo limpiar el borrador:", err);
     }
   }, []);
 
@@ -392,7 +393,7 @@ const ChannelForm = () => {
       if (stored?.selectedEquipoTipo) setSelectedEquipoTipo(stored.selectedEquipoTipo);
       if (Array.isArray(stored?.draftNodes)) setDraftNodes(stored.draftNodes);
 
-      // ✅ normaliza direcciones al restaurar edges (vuelta/bi -> bidireccional)
+      // ✅ normaliza direcciones al restaurar edges (bidireccional -> bi)
       if (Array.isArray(stored?.draftEdges)) {
         const restoredEdges = stored.draftEdges.map((e) => {
           const d = e?.data || {};
@@ -414,8 +415,10 @@ const ChannelForm = () => {
 
       const dirValue = stored?.edgeDirectionValue || stored?.edgeDirection?.value;
       if (dirValue) {
-        const dirOpt = EDGE_DIR_OPTIONS.find((opt) => opt.value === normalizeDirection(dirValue));
-        if (dirOpt) setEdgeDirection(dirOpt);
+        const normalized = normalizeDirection(dirValue);
+        const dirOpt =
+          EDGE_DIR_OPTIONS.find((opt) => opt.value === normalized) || EDGE_DIR_OPTIONS[0];
+        setEdgeDirection(dirOpt);
 
         if (!storedColor && !stored?.edgeColorSel) {
           const def = defaultEdgeColorByDir(dirOpt.value);
@@ -424,7 +427,7 @@ const ChannelForm = () => {
         }
       }
     } catch (err) {
-      console.warn("No se pudo restaurar el borrador del formulario:", err);
+      console.warn("No se pudo restaurar el borrador:", err);
     } finally {
       setIsRestoring(false);
     }
@@ -518,7 +521,7 @@ const ChannelForm = () => {
         const { nodes: normalizedNodes, edges: normalizedEdges } = prepareDiagramState(diagram);
         if (!active) return;
 
-        // ✅ normaliza direcciones cargadas desde API
+        // ✅ normaliza direcciones cargadas desde API (bidireccional -> bi)
         const fixedEdges = (normalizedEdges || []).map((e) => {
           const d = e?.data || {};
           const dir = normalizeDirection(d.direction);
@@ -832,33 +835,30 @@ const ChannelForm = () => {
     [draftNodes, draftEdges]
   );
 
-  const handleRemoveEdge = useCallback(
-    async (edgeId) => {
-      const edge = draftEdges.find((e) => String(e.id) === String(edgeId));
-      if (!edge) return;
+  const handleRemoveEdge = useCallback(async (edgeId) => {
+    const edge = draftEdges.find((e) => String(e.id) === String(edgeId));
+    if (!edge) return;
 
-      const confirm = await Swal.fire({
-        icon: "warning",
-        title: `Eliminar enlace "${edgeId}"`,
-        text: "El enlace seleccionado se eliminará del borrador.",
-        showCancelButton: true,
-        confirmButtonText: "Sí, eliminar",
-        cancelButtonText: "Cancelar",
-      });
+    const confirm = await Swal.fire({
+      icon: "warning",
+      title: `Eliminar enlace "${edgeId}"`,
+      text: "El enlace seleccionado se eliminará del borrador.",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+    });
 
-      if (!confirm.isConfirmed) return;
+    if (!confirm.isConfirmed) return;
 
-      setDraftEdges((prev) => prev.filter((e) => String(e.id) !== String(edgeId)));
+    setDraftEdges((prev) => prev.filter((e) => String(e.id) !== String(edgeId)));
 
-      Swal.fire({
-        icon: "success",
-        title: "Enlace eliminado",
-        timer: 1200,
-        showConfirmButton: false,
-      });
-    },
-    [draftEdges]
-  );
+    Swal.fire({
+      icon: "success",
+      title: "Enlace eliminado",
+      timer: 1200,
+      showConfirmButton: false,
+    });
+  }, [draftEdges]);
 
   const handleClearAll = useCallback(async () => {
     const nodeCount = draftNodes.length;
@@ -1333,7 +1333,7 @@ const ChannelForm = () => {
                   />
                 </label>
 
-                {/* ✅ SELECT DIRECCIÓN MODIFICADO */}
+                {/* ✅ SELECT DIRECCIÓN MODIFICADO (ida | bi) */}
                 <label className="chf__label">
                   Dirección
                   <Select
@@ -1341,9 +1341,9 @@ const ChannelForm = () => {
                     options={EDGE_DIR_OPTIONS}
                     value={edgeDirection}
                     onChange={(opt) => {
+                      const safeValue = normalizeDirection(opt?.value);
                       const safeOpt =
-                        EDGE_DIR_OPTIONS.find((o) => o.value === normalizeDirection(opt?.value)) ||
-                        EDGE_DIR_OPTIONS[0];
+                        EDGE_DIR_OPTIONS.find((o) => o.value === safeValue) || EDGE_DIR_OPTIONS[0];
 
                       setEdgeDirection(safeOpt);
 
@@ -1449,7 +1449,7 @@ const ChannelForm = () => {
                       });
                     }
 
-                    // ✅ ahora SOLO ida o bidireccional
+                    // ✅ ahora SOLO ida o bi
                     const dir = normalizeDirection(edgeDirection?.value);
 
                     // ✅ Color elegido (o default por dirección)
@@ -1480,7 +1480,7 @@ const ChannelForm = () => {
                       style: { stroke: color, strokeWidth: 2 },
 
                       data: {
-                        direction: dir,
+                        direction: dir, // ✅ queda "bi" en DB
                         color,
                         label: trimmedLabel || id,
                         labelStart: labelStart || "",
@@ -1550,8 +1550,9 @@ const ChannelForm = () => {
                             }}
                           />
 
+                          {/* ✅ mostrar lindo, pero guardar "bi" */}
                           <span className="chf__muted" style={{ marginLeft: 8, color: edgeColor }}>
-                            {dir}
+                            {dir === "bi" ? "bidireccional" : dir}
                           </span>
                         </div>
 
