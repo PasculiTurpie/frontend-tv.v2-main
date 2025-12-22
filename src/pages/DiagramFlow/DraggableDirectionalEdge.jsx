@@ -6,6 +6,17 @@ import { createPortal } from "react-dom";
 import "./DraggableDirectionalEdge.css";
 import { getDirectionColor } from "./directionColors";
 
+// Normaliza dirección a: ida | vuelta | bi
+const normalizeDirection = (raw) => {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "ida") return "ida";
+  if (v === "vuelta") return "vuelta";
+  if (v === "bi" || v === "bidireccional") return "bi";
+  // compat vieja
+  if (v === "bidi" || v === "bidirectional") return "bi";
+  return "ida";
+};
+
 export default function DraggableDirectionalEdge(props) {
   const {
     id,
@@ -52,15 +63,23 @@ export default function DraggableDirectionalEdge(props) {
   const tooltipTitle = data?.tooltipTitle ?? label ?? data?.label ?? id ?? "Etiqueta centro";
   const tooltipBody = data?.tooltip || buildTooltipFromData(data);
 
-  /* --------------------------- Color --------------------------- */
-  const direction = data?.direction ?? "ida"; // ida | bidireccional
+  /* --------------------------- Dirección --------------------------- */
+  // puede venir: ida | vuelta | bi | bidireccional
+  const direction = useMemo(() => normalizeDirection(data?.direction), [data?.direction]);
 
+  const isBi = direction === "bi";
+  const isVuelta = direction === "vuelta";
+  const isIda = direction === "ida";
+
+  /* --------------------------- Color --------------------------- */
   // ✅ Prioriza markerEnd.color si viene desde ReactFlow/DiagramFlow
+  // Nota: getDirectionColor debe tolerar "bi" (si no, ya tenemos fallbacks)
   const chosenColor =
     markerEnd?.color ||
     data?.color ||
     style?.stroke ||
-    getDirectionColor(direction);
+    getDirectionColor(direction) ||
+    "#3b82f6";
 
   const animatedStyle = {
     stroke: chosenColor,
@@ -161,6 +180,13 @@ export default function DraggableDirectionalEdge(props) {
       : null;
 
   /* ----------------------- Render del Edge ----------------------- */
+  // Reglas de marcadores:
+  // - ida: solo markerEnd
+  // - vuelta: solo markerStart
+  // - bi: ambos
+  const markerStartAttr = isBi || isVuelta ? markerStartUrl : undefined;
+  const markerEndAttr = isBi || isIda ? markerEndUrl : undefined;
+
   return (
     <>
       <defs>
@@ -178,7 +204,7 @@ export default function DraggableDirectionalEdge(props) {
           <path d="M 2 2 L 10 6 L 2 10 Z" fill={chosenColor} stroke="none" />
         </marker>
 
-        {/* Flecha inicial (solo bidireccional) */}
+        {/* Flecha inicial */}
         <marker
           id={markerStartId}
           markerWidth="12"
@@ -199,8 +225,8 @@ export default function DraggableDirectionalEdge(props) {
         fill="none"
         style={animatedStyle}
         className="edge-stroke-animated"
-        markerEnd={markerEndUrl}
-        markerStart={direction === "bidireccional" ? markerStartUrl : undefined}
+        markerEnd={markerEndAttr}
+        markerStart={markerStartAttr}
       />
 
       {/* Path invisible para hover + seguimiento del mouse */}
