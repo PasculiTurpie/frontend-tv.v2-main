@@ -618,6 +618,18 @@ export const DiagramFlow = () => {
     return String(name || "").trim() || "Diagrama del canal";
   }, [dataChannel]);
 
+    // ✅ Tipo de tecnología para mostrar en el header (ej: IPTV, OTT, DVB, etc.)
+  const channelTech = useMemo(() => {
+    const tech =
+      dataChannel?.tipoTecnologia ??
+      dataChannel?.tipo_tecnologia ??
+      dataChannel?.technologyType ??
+      dataChannel?.tecnologia ??
+      "";
+    return String(tech || "").trim();
+  }, [dataChannel]);
+
+
   // ✅ Sidebar detail loader (IRD => getIdIrd SIEMPRE)
   useEffect(() => {
     let cancelled = false;
@@ -1390,7 +1402,7 @@ export const DiagramFlow = () => {
               ← Volver
             </button>
 
-            <h2
+                        <h2
               className="diagram-title"
               style={{
                 margin: 0,
@@ -1401,10 +1413,16 @@ export const DiagramFlow = () => {
                 lineHeight: 1.2,
                 padding: "4px 8px",
               }}
-              title={channelTitle}
+              title={channelTech ? `${channelTitle} — ${channelTech}` : channelTitle}
             >
               {channelTitle}
+              {channelTech ? (
+                <span style={{ display: "block", fontSize: 13, fontWeight: 600, opacity: 0.75, marginTop: 2 }}>
+                  {channelTech}
+                </span>
+              ) : null}
             </h2>
+
 
             {/* Spacer para mantener el título centrado */}
             <div style={{ width: 90 }} />
