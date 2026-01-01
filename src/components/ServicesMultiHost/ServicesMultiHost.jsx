@@ -19,11 +19,9 @@ import "../../components/Loader__Spinner/loader__spinner.css";
  * - Switch: Pattern/Still como falla
  * - Errores: alerta si detecta Outputs Url duplicados
  *
- * ✅ EXTENDIDO:
- * - Diagnóstico único de falla por señal: faultCode/faultText/faultSeverity
- *   Prioridad: STOP > BLACKOUT > INPUT_LOSS > VIDEO_* > AUDIO_SILENT > CARTON > TS_* > OK
- * - Columna nueva "Falla"
- * - Tabla "Señales en falla" basada en faultSeverity !== "OK"
+ * Ajustes solicitados:
+ * ✅ Ordenar por columnas también en la tabla "Señales en falla" (opción 1: misma sortConfig)
+ * ✅ "Señales en falla": mostrar SOLO problemas de audio, video (o ambas) y/o señal en Stop
  */
 
 const TITAN_SERVICES_PATH = "/api/v1/servicesmngt/services";
@@ -112,7 +110,6 @@ const COL_WIDTHS = {
     fuente: 260,
     estado: 140,
     alarma: 120,
-    falla: 260,
 };
 
 /* ───────────────────────── utils ───────────────────────── */
@@ -370,211 +367,19 @@ function detectAudioAlarm(svc) {
     };
 }
 
-/* ───────────────────────── Diagnóstico único de falla (faultCode) ───────────────────────── */
-
-// Umbrales TS (ajústalos a tu realidad)
-const TS_THRESHOLDS = {
-    warnTotal: 200, // suma CC/PID para WARN
-    critTotal: 1500, // suma CC/PID para CRIT
-    critWorstPid: 1000, // PID con muchos errores
-};
-
-const MSG = {
-    VIDEO_MISSING: "Video Signal Missing",
-    VIDEO_FROZEN: "Video Signal Frozen",
-    AUDIO_SILENT: "Audio Signal Silent",
-    INPUT_LOSS: "Input Source Loss",
-};
-
-function normalizeMsgName(m) {
-    if (!m) return "";
-    if (typeof m === "string") return m;
-    return typeof m?.Name === "string" ? m.Name : "";
-}
-
-function hasMsg(svc, msgName) {
-    const msgs = get(svc, "State.Messages", []);
-    return (
-        Array.isArray(msgs) &&
-        msgs.some((m) => normalizeMsgName(m) === msgName)
-    );
-}
-
-function getTsDetails(svc) {
-    const etr = get(svc, "State.EtrStatistics[0]", null);
-    if (!etr) {
-        return { total: 0, patMissing: 0, pmtMissing: 0, worstPid: null };
-    }
-
-    const patMissing = Number(etr.PatMissingErrors) || 0;
-    const pmtMissing = Number(etr.PmtMissingErrors) || 0;
-
-    const pidErrors = Array.isArray(etr.PidErrors) ? etr.PidErrors : [];
+/** Suma de errores TS (PID errors o total CC errors) */
+function getTsErrors(svc) {
+    const pidErrors = get(svc, "State.EtrStatistics[0].PidErrors", []);
+    const totalCce = get(svc, "State.EtrStatistics[0].TotalContinuityCountErrors", 0);
     let sum = 0;
-    let worstPid = null;
-
-    for (const p of pidErrors) {
-        const errors = Number(p?.errors) || 0;
-        const id = p?.id;
-        sum += errors;
-        if (!worstPid || errors > (worstPid.errors || 0)) {
-            worstPid = { id, errors };
+    if (Array.isArray(pidErrors)) {
+        for (const p of pidErrors) {
+            const n = Number(p?.errors);
+            if (!Number.isNaN(n)) sum += n;
         }
     }
-
-    const totalCce = Number(etr.TotalContinuityCountErrors) || 0;
-
-    // Mantiene tu lógica previa: usar suma de PID si existe, si no usar totalCce
-    const total = sum > 0 ? sum : totalCce;
-
-    return { total, patMissing, pmtMissing, worstPid };
-}
-
-/**
- * Determina 1 sola falla principal con prioridad.
- * opts:
- *  - treatPatternOrStillAsFail: boolean
- *  - showCartonAsDegradedEvenIfNotFail: boolean
- */
-function detectPrimaryFault(svc, opts = {}) {
-    const treatPatternOrStillAsFail = !!opts.treatPatternOrStillAsFail;
-    const showCartonAsDegradedEvenIfNotFail =
-        !!opts.showCartonAsDegradedEvenIfNotFail;
-
-    const state = get(svc, "State.State", "");
-    const streaming = !!get(svc, "State.Streaming", false);
-
-    // STOP / DOWN
-    if (!streaming || String(state).toLowerCase() !== "encoding") {
-        return {
-            faultCode: "STOP",
-            faultText: !streaming
-                ? "STOP: Streaming false"
-                : `STOP: State=${state || "?"}`,
-            severity: "CRIT",
-        };
-    }
-
-    // BLACKOUT
-    if (get(svc, "State.Blackout", false) === true) {
-        return {
-            faultCode: "BLACKOUT",
-            faultText: "BLACKOUT activo",
-            severity: "CRIT",
-        };
-    }
-
-    // Mensajes explícitos (alta confianza)
-    if (hasMsg(svc, MSG.INPUT_LOSS)) {
-        return {
-            faultCode: "INPUT_LOSS",
-            faultText: "Input Source Loss",
-            severity: "CRIT",
-        };
-    }
-    if (hasMsg(svc, MSG.VIDEO_MISSING)) {
-        return {
-            faultCode: "VIDEO_MISSING",
-            faultText: "Video Signal Missing",
-            severity: "CRIT",
-        };
-    }
-    if (hasMsg(svc, MSG.VIDEO_FROZEN)) {
-        return {
-            faultCode: "VIDEO_FROZEN",
-            faultText: "Video Signal Frozen",
-            severity: "CRIT",
-        };
-    }
-    if (hasMsg(svc, MSG.AUDIO_SILENT)) {
-        return {
-            faultCode: "AUDIO_SILENT",
-            faultText: "Audio Signal Silent",
-            severity: "CRIT",
-        };
-    }
-
-    // CARTÓN / Pattern / Still
-    const emuMode = get(
-        svc,
-        "Device.Template.Tracks.VideoTracks[0].EmulationMode.Mode",
-        "Off"
-    );
-    const modeLower = String(emuMode || "").toLowerCase();
-    const patternName = get(
-        svc,
-        "Device.Template.Tracks.VideoTracks[0].EmulationMode.PatternName",
-        null
-    );
-    const stillPictureEnabled = !!get(
-        svc,
-        "Device.Template.Tracks.VideoTracks[0].Variants[0].StillPicture",
-        false
-    );
-    const stillPictureFilename = get(
-        svc,
-        "Device.Template.Tracks.VideoTracks[0].Variants[0].StillPictureFilename",
-        null
-    );
-
-    const isCarton =
-        modeLower === "pattern" ||
-        modeLower === "still" ||
-        stillPictureEnabled;
-
-    if (
-        isCarton &&
-        (treatPatternOrStillAsFail || showCartonAsDegradedEvenIfNotFail)
-    ) {
-        const name = stillPictureEnabled
-            ? stillPictureFilename || "Still Picture"
-            : patternName || "Pattern";
-        return {
-            faultCode: "CARTON",
-            faultText: `Cartón: ${name}`,
-            severity: treatPatternOrStillAsFail ? "CRIT" : "WARN",
-        };
-    }
-
-    // TS degradado (cuando no hay mensaje explícito)
-    const ts = getTsDetails(svc);
-
-    if (ts.patMissing > 0 || ts.pmtMissing > 0) {
-        return {
-            faultCode: "TS_PAT_PMT",
-            faultText: `TS: PAT/PMT missing (PAT=${ts.patMissing}, PMT=${ts.pmtMissing})`,
-            severity: "WARN",
-        };
-    }
-
-    if (
-        ts.total >= TS_THRESHOLDS.critTotal ||
-        (ts.worstPid?.errors || 0) >= TS_THRESHOLDS.critWorstPid
-    ) {
-        return {
-            faultCode: "TS_DEGRADED",
-            faultText: `TS: errores altos (total=${ts.total}${
-                ts.worstPid
-                    ? `, worstPid=${ts.worstPid.id}:${ts.worstPid.errors}`
-                    : ""
-            })`,
-            severity: "CRIT",
-        };
-    }
-
-    if (ts.total >= TS_THRESHOLDS.warnTotal) {
-        return {
-            faultCode: "TS_DEGRADED",
-            faultText: `TS: errores (total=${ts.total}${
-                ts.worstPid
-                    ? `, worstPid=${ts.worstPid.id}:${ts.worstPid.errors}`
-                    : ""
-            })`,
-            severity: "WARN",
-        };
-    }
-
-    return { faultCode: "OK", faultText: "OK", severity: "OK" };
+    const total = sum || Number(totalCce) || 0;
+    return total;
 }
 
 /* ───────────────────────── extracción por fila ───────────────────────── */
@@ -653,17 +458,12 @@ function extractRow(hostLabel, ip, svc, opts = {}) {
             : `live: ${src.sourceName ?? ""}`;
 
     // Alarmas según reglas ratificadas y preferencia de UI
-    const { videoAlarm, hasExplicitVideoFail, patternOrStill } =
-        detectVideoAlarm(s, treatPatternOrStillAsFail);
+    const { videoAlarm, hasExplicitVideoFail, patternOrStill } = detectVideoAlarm(
+        s,
+        treatPatternOrStillAsFail
+    );
     const { audioAlarm, audioLevelDb, audioThreshold } = detectAudioAlarm(s);
-
-    // TS detallado + diagnóstico principal
-    const ts = getTsDetails(s);
-    const fault = detectPrimaryFault(s, {
-        treatPatternOrStillAsFail,
-        // Si quieres que "Cartón" aparezca como WARN aunque no sea falla:
-        // showCartonAsDegradedEvenIfNotFail: true,
-    });
+    const tsErrors = getTsErrors(s);
 
     return {
         host: hostLabel,
@@ -674,32 +474,16 @@ function extractRow(hostLabel, ip, svc, opts = {}) {
         sourceMode: src.mode,
         sourceName: src.sourceName ?? "",
         sourceText,
-        state:
-            typeof stateVal === "object"
-                ? JSON.stringify(stateVal)
-                : stateVal ?? "",
-
-        // Diagnóstico principal (1 falla)
-        faultCode: fault.faultCode,
-        faultText: fault.faultText,
-        faultSeverity: fault.severity,
-
-        // Datos de alarmas (ratificadas)
+        state: typeof stateVal === "object" ? JSON.stringify(stateVal) : stateVal ?? "",
+        // Datos de alarmas
         audioAlarm,
         audioLevelDb,
         audioThreshold,
         videoAlarm,
-
-        // TS (detalle + total)
-        tsErrors: ts.total,
-        patMissing: ts.patMissing,
-        pmtMissing: ts.pmtMissing,
-        worstPid: ts.worstPid,
-
+        tsErrors,
         // Inputs IP
         ipInputs,
         activeInputIndex,
-
         // Flags internos útiles para tooltips / depuración
         _explicitVideoFail: !!hasExplicitVideoFail,
         _patternOrStill: !!patternOrStill,
@@ -787,9 +571,7 @@ function getEntryHost(entry) {
         entry.ip ??
         entry.hostIp ??
         entry.hostname ??
-        (typeof entry === "object" && typeof entry.host === "string"
-            ? entry.host
-            : null)
+        (typeof entry === "object" && typeof entry.host === "string" ? entry.host : null)
     );
 }
 
@@ -821,15 +603,11 @@ function processTitanEntries(entries, hostMap, opts) {
             const payload = unwrapTitanPayload(entry);
             const services = extractServicesArray(payload);
             rows.push(
-                ...services.map((svc) =>
-                    extractRow(hostInfo.label, hostInfo.ip, svc, opts)
-                )
+                ...services.map((svc) => extractRow(hostInfo.label, hostInfo.ip, svc, opts))
             );
         } else {
             errors.push(
-                `${hostInfo.label} (${hostInfo.ip}): ${describeTitanEntryError(
-                    entry
-                )}`
+                `${hostInfo.label} (${hostInfo.ip}): ${describeTitanEntryError(entry)}`
             );
         }
     }
@@ -855,17 +633,11 @@ function rowsToCsv(rows) {
         "Outputs[0].Outputs.Url",
         "Fuente",
         "State.State",
-        "FaultCode",
-        "FaultSeverity",
-        "FaultText",
         "AudioAlarm",
         "VideoAlarm",
         "AudioLevelDb",
         "AudioThreshold",
         "TsErrors",
-        "PatMissing",
-        "PmtMissing",
-        "WorstPid",
     ];
     const lines = [headers.map(escapeCsvField).join(",")];
     for (const r of rows) {
@@ -875,22 +647,14 @@ function rowsToCsv(rows) {
                 r.ip,
                 r.name,
                 r.inputUrl,
-                typeof r.outputs === "string"
-                    ? r.outputs
-                    : JSON.stringify(r.outputs),
+                typeof r.outputs === "string" ? r.outputs : JSON.stringify(r.outputs),
                 r.sourceText,
                 r.state,
-                r.faultCode,
-                r.faultSeverity,
-                r.faultText,
                 r.audioAlarm,
                 r.videoAlarm,
                 r.audioLevelDb ?? "",
                 r.audioThreshold ?? "",
                 r.tsErrors ?? 0,
-                r.patMissing ?? 0,
-                r.pmtMissing ?? 0,
-                r.worstPid ? `${r.worstPid.id}:${r.worstPid.errors}` : "",
             ]
                 .map(escapeCsvField)
                 .join(",")
@@ -944,14 +708,8 @@ function collectDuplicateOutputErrors(rows) {
 
 function compareRowsWithConfig(a, b, sortConfig) {
     if (!sortConfig || !sortConfig.key) return 0;
-    const { primary: aPrimary, secondary: aSecondary } = getSortDataForKey(
-        a,
-        sortConfig.key
-    );
-    const { primary: bPrimary, secondary: bSecondary } = getSortDataForKey(
-        b,
-        sortConfig.key
-    );
+    const { primary: aPrimary, secondary: aSecondary } = getSortDataForKey(a, sortConfig.key);
+    const { primary: bPrimary, secondary: bSecondary } = getSortDataForKey(b, sortConfig.key);
 
     const base = comparePrimitive(aPrimary, bPrimary);
     if (base !== 0) {
@@ -970,6 +728,7 @@ function getSortDataForKey(row, key) {
     switch (key) {
         case "host":
             return { primary: row?.host ?? "", secondary: row?.ip ?? "" };
+
         case "ip": {
             const numeric = ipToSortableNumber(row?.ip);
             if (numeric !== null) {
@@ -977,39 +736,36 @@ function getSortDataForKey(row, key) {
             }
             return { primary: row?.ip ?? "", secondary: row?.host ?? "" };
         }
+
         case "name":
             return { primary: row?.name ?? "", secondary: row?.host ?? "" };
-        case "fault":
-            return {
-                primary: row?.faultSeverity ?? "",
-                secondary: row?.faultCode ?? "",
-            };
-        case "inputUrl":
-            return { primary: row?.inputUrl ?? "", secondary: row?.host ?? "" };
+
+        case "source":
+            return { primary: row?.sourceText ?? "", secondary: row?.name ?? "" };
+
         case "outputs": {
             const out =
                 typeof row?.outputs === "string"
                     ? row.outputs
                     : JSON.stringify(row?.outputs ?? "");
-            return { primary: out ?? "", secondary: row?.host ?? "" };
+            return { primary: out ?? "", secondary: row?.name ?? "" };
         }
+
         case "audioAlarm":
-            return {
-                primary: row?.audioAlarm ? 1 : 0,
-                secondary: row?.host ?? "",
-            };
+            return { primary: row?.audioAlarm ? 1 : 0, secondary: row?.name ?? "" };
+
         case "videoAlarm":
-            return {
-                primary: row?.videoAlarm ? 1 : 0,
-                secondary: row?.host ?? "",
-            };
+            return { primary: row?.videoAlarm ? 1 : 0, secondary: row?.name ?? "" };
+
         case "state":
-            return { primary: row?.state ?? "", secondary: row?.host ?? "" };
+            return { primary: row?.state ?? "", secondary: row?.name ?? "" };
+
         case "tsErrors": {
             const numeric = Number(row?.tsErrors);
             const primary = Number.isFinite(numeric) ? numeric : 0;
-            return { primary, secondary: row?.host ?? "" };
+            return { primary, secondary: row?.name ?? "" };
         }
+
         default:
             return { primary: row?.[key] ?? "", secondary: row?.host ?? "" };
     }
@@ -1071,7 +827,7 @@ export default function ServicesMultiHost() {
     const [query, setQuery] = useState("");
     const [autoRefresh, setAutoRefresh] = useState(false);
     const [showErrors, setShowErrors] = useState(false);
-    const [treatPatternAsFail, setTreatPatternAsFail] = useState(false); // << Switch UI (opcional)
+    const [treatPatternAsFail, setTreatPatternAsFail] = useState(false); // << Switch UI (si lo reactivas)
     const [sortConfig, setSortConfig] = useState({
         key: null,
         direction: "asc",
@@ -1092,9 +848,7 @@ export default function ServicesMultiHost() {
         if (!hosts || hosts.length === 0) {
             setRows([]);
             setErrors(
-                hostFetchError
-                    ? [hostFetchError]
-                    : ["No hay hosts Titan para consultar."]
+                hostFetchError ? [hostFetchError] : ["No hay hosts Titan para consultar."]
             );
             return;
         }
@@ -1112,9 +866,7 @@ export default function ServicesMultiHost() {
         const pushRowsFromHost = (hostInfo, payload) => {
             const services = extractServicesArray(payload);
             nextRows.push(
-                ...services.map((svc) =>
-                    extractRow(hostInfo.label, hostInfo.ip, svc, opts)
-                )
+                ...services.map((svc) => extractRow(hostInfo.label, hostInfo.ip, svc, opts))
             );
         };
 
@@ -1130,14 +882,10 @@ export default function ServicesMultiHost() {
             nextErrors = [...processed.errors];
 
             // Fallback: por si alguno no vino en el multi
-            const missingHosts = hostIps.filter(
-                (ip) => !processed.seenHosts.has(ip)
-            );
+            const missingHosts = hostIps.filter((ip) => !processed.seenHosts.has(ip));
             if (missingHosts.length > 0) {
                 const settled = await Promise.allSettled(
-                    missingHosts.map((ip) =>
-                        api.getTitanServices(ip, TITAN_REQUEST_OPTIONS)
-                    )
+                    missingHosts.map((ip) => api.getTitanServices(ip, TITAN_REQUEST_OPTIONS))
                 );
 
                 settled.forEach((result, index) => {
@@ -1147,9 +895,9 @@ export default function ServicesMultiHost() {
                         pushRowsFromHost(hostInfo, result.value);
                     } else {
                         nextErrors.push(
-                            `${hostInfo.label} (${
-                                hostInfo.ip
-                            }): ${describeError(result.reason)}`
+                            `${hostInfo.label} (${hostInfo.ip}): ${describeError(
+                                result.reason
+                            )}`
                         );
                     }
                 });
@@ -1160,9 +908,7 @@ export default function ServicesMultiHost() {
             nextErrors = [`Titans multi-host: ${describeError(err)}`];
 
             const settled = await Promise.allSettled(
-                hosts.map((host) =>
-                    api.getTitanServices(host.ip, TITAN_REQUEST_OPTIONS)
-                )
+                hosts.map((host) => api.getTitanServices(host.ip, TITAN_REQUEST_OPTIONS))
             );
 
             settled.forEach((result, index) => {
@@ -1171,9 +917,7 @@ export default function ServicesMultiHost() {
                     pushRowsFromHost(hostInfo, result.value);
                 } else {
                     nextErrors.push(
-                        `${hostInfo.label} (${hostInfo.ip}): ${describeError(
-                            result.reason
-                        )}`
+                        `${hostInfo.label} (${hostInfo.ip}): ${describeError(result.reason)}`
                     );
                 }
             });
@@ -1199,9 +943,7 @@ export default function ServicesMultiHost() {
     useEffect(() => {
         if (!hostsLoading) {
             if (hostFetchError) {
-                setErrors((e) =>
-                    e.includes(hostFetchError) ? e : [...e, hostFetchError]
-                );
+                setErrors((e) => (e.includes(hostFetchError) ? e : [...e, hostFetchError]));
             }
             if (hosts.length > 0) {
                 loadAll();
@@ -1230,6 +972,7 @@ export default function ServicesMultiHost() {
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         let nextRows = rows;
+
         if (q) {
             nextRows = rows.filter((r) =>
                 [
@@ -1240,9 +983,6 @@ export default function ServicesMultiHost() {
                     r.outputs,
                     r.sourceText,
                     r.state,
-                    r.faultCode,
-                    r.faultSeverity,
-                    r.faultText,
                     r.audioAlarm,
                     r.videoAlarm,
                     r.tsErrors,
@@ -1252,21 +992,24 @@ export default function ServicesMultiHost() {
             );
         }
 
-        if (!sortConfig.key) {
-            return nextRows;
-        }
+        if (!sortConfig.key) return nextRows;
 
-        const sorted = [...nextRows].sort((a, b) =>
-            compareRowsWithConfig(a, b, sortConfig)
-        );
-        return sorted;
+        return [...nextRows].sort((a, b) => compareRowsWithConfig(a, b, sortConfig));
     }, [rows, query, sortConfig]);
 
-    // Señales en falla: usa diagnóstico único
-    const failingRows = useMemo(
-        () => filtered.filter((r) => r.faultSeverity && r.faultSeverity !== "OK"),
-        [filtered]
-    );
+    // ✅ SOLO: problemas audio, video (explícito o videoAlarm), ambas, o Stop
+    // ✅ Opción 1: se ordena con la misma sortConfig que la tabla principal
+    const failingRows = useMemo(() => {
+        const base = filtered.filter((r) => {
+            const audioFail = r.audioAlarm === true;
+            const videoFail = r._explicitVideoFail === true || r.videoAlarm === true;
+            const stopped = r.state === "Stopped";
+            return audioFail || videoFail || stopped;
+        });
+
+        if (!sortConfig?.key) return base;
+        return [...base].sort((a, b) => compareRowsWithConfig(a, b, sortConfig));
+    }, [filtered, sortConfig]);
 
     const handleExportCsv = useCallback(() => {
         const stamp = new Date()
@@ -1291,10 +1034,7 @@ export default function ServicesMultiHost() {
     const handleSort = useCallback((key) => {
         setSortConfig((prev) => {
             if (prev.key === key) {
-                return {
-                    key,
-                    direction: prev.direction === "asc" ? "desc" : "asc",
-                };
+                return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
             }
             return { key, direction: "asc" };
         });
@@ -1313,23 +1053,11 @@ export default function ServicesMultiHost() {
     const renderSortLabel = useCallback(
         (label, key) => {
             const isActive = sortConfig.key === key;
-            const indicator = isActive
-                ? sortConfig.direction === "asc"
-                    ? "▲"
-                    : "▼"
-                : "↕";
+            const indicator = isActive ? (sortConfig.direction === "asc" ? "▲" : "▼") : "↕";
             return (
-                <span
-                    style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                    }}
-                >
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <span>{label}</span>
-                    <span style={{ fontSize: 11, color: "#6b7280" }}>
-                        {indicator}
-                    </span>
+                    <span style={{ fontSize: 11, color: "#6b7280" }}>{indicator}</span>
                 </span>
             );
         },
@@ -1472,7 +1200,7 @@ export default function ServicesMultiHost() {
                     ref={searchRef}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Buscar (host, IP, nombre, estado, falla...)"
+                    placeholder="Buscar (host, IP, nombre, estado...)"
                     className="search-input"
                     style={{ minWidth: 260 }}
                 />
@@ -1491,13 +1219,7 @@ export default function ServicesMultiHost() {
                     className="btn btn-primary"
                 >
                     {loading ? (
-                        <span
-                            style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 8,
-                            }}
-                        >
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                             <Spinner size={14} stroke={2} />
                             Cargando…
                         </span>
@@ -1505,9 +1227,7 @@ export default function ServicesMultiHost() {
                         "Refrescar"
                     )}
                 </button>
-                <label
-                    style={{ display: "flex", gap: 6, alignItems: "center" }}
-                >
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input
                         type="checkbox"
                         checked={autoRefresh}
@@ -1517,9 +1237,7 @@ export default function ServicesMultiHost() {
                     Auto 30s
                 </label>
 
-                <label
-                    style={{ display: "flex", gap: 6, alignItems: "center" }}
-                >
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input
                         type="checkbox"
                         checked={showErrors}
@@ -1529,24 +1247,23 @@ export default function ServicesMultiHost() {
                     Mostrar errores
                 </label>
 
-                {/* Switch Pattern/Still como falla (opcional) */}
-                {/* 
-                <label
-                  style={{ display: "flex", gap: 6, alignItems: "center" }}
-                  title="Si está activo, Pattern/Still se considerará falla (CARTON)."
-                >
-                  <input
-                    type="checkbox"
-                    checked={treatPatternAsFail}
-                    onChange={(e) => {
-                      setTreatPatternAsFail(e.target.checked);
-                      setTimeout(() => loadAll(), 0);
-                    }}
-                    disabled={hostsLoading || hosts.length === 0}
-                  />
-                  Pattern/Still como falla
-                </label>
-                */}
+                {/* Switch Pattern/Still como falla (opcional)
+        <label
+          style={{ display: "flex", gap: 6, alignItems: "center" }}
+          title="Si está activo, Pattern/Still se considerará falla de video."
+        >
+          <input
+            type="checkbox"
+            checked={treatPatternAsFail}
+            onChange={(e) => {
+              setTreatPatternAsFail(e.target.checked);
+              setTimeout(() => loadAll(), 0);
+            }}
+            disabled={hostsLoading || hosts.length === 0}
+          />
+          Pattern/Still como falla
+        </label>
+        */}
 
                 <button
                     onClick={handleExportCsv}
@@ -1567,9 +1284,7 @@ export default function ServicesMultiHost() {
                         marginBottom: 12,
                     }}
                 >
-                    {hostsLoading
-                        ? "Descubriendo hosts Titan..."
-                        : hostFetchError}
+                    {hostsLoading ? "Descubriendo hosts Titan..." : hostFetchError}
                 </div>
             )}
 
@@ -1596,19 +1311,11 @@ export default function ServicesMultiHost() {
             {/* Tabla de señales en falla */}
             {failingRows.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            marginBottom: 6,
-                        }}
-                    >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                         <strong>Señales en falla</strong>
-                        <span style={{ fontSize: 12, color: "#666" }}>
-                            ({failingRows.length})
-                        </span>
+                        <span style={{ fontSize: 12, color: "#666" }}>({failingRows.length})</span>
                     </div>
+
                     <div
                         style={{
                             display: "inline-block",
@@ -1628,140 +1335,152 @@ export default function ServicesMultiHost() {
                         >
                             <thead style={{ background: "#fdeeee" }}>
                                 <tr>
+                                    <th style={{ ...thCompact, width: 36, maxWidth: 36 }}> </th>
+
                                     <th
-                                        style={{
-                                            ...thCompact,
-                                            width: 36,
-                                            maxWidth: 36,
-                                        }}
+                                        style={{ ...thCompact, cursor: "pointer", userSelect: "none" }}
+                                        onClick={() => handleSort("name")}
+                                        onKeyDown={(e) => handleSortKeyDown(e, "name")}
+                                        role="button"
+                                        tabIndex={0}
                                     >
-                                        {" "}
+                                        {renderSortLabel("Name", "name")}
                                     </th>
-                                    <th style={thCompact}>Name</th>
-                                    <th style={thCompact}>IP</th>
-                                    <th style={thCompact}>Falla</th>
-                                    <th style={thCompact}>Fuente</th>
-                                    <th style={thCompact}>Audio</th>
-                                    <th style={thCompact}>Video</th>
-                                    <th style={thCompact}>TS Err</th>
+
+                                    <th
+                                        style={{ ...thCompact, cursor: "pointer", userSelect: "none" }}
+                                        onClick={() => handleSort("ip")}
+                                        onKeyDown={(e) => handleSortKeyDown(e, "ip")}
+                                        role="button"
+                                        tabIndex={0}
+                                    >
+                                        {renderSortLabel("IP", "ip")}
+                                    </th>
+
+                                    <th
+                                        style={{ ...thCompact, cursor: "pointer", userSelect: "none" }}
+                                        onClick={() => handleSort("source")}
+                                        onKeyDown={(e) => handleSortKeyDown(e, "source")}
+                                        role="button"
+                                        tabIndex={0}
+                                    >
+                                        {renderSortLabel("Fuente", "source")}
+                                    </th>
+
+                                    <th
+                                        style={{ ...thCompact, cursor: "pointer", userSelect: "none" }}
+                                        onClick={() => handleSort("audioAlarm")}
+                                        onKeyDown={(e) => handleSortKeyDown(e, "audioAlarm")}
+                                        role="button"
+                                        tabIndex={0}
+                                    >
+                                        {renderSortLabel("Audio", "audioAlarm")}
+                                    </th>
+
+                                    <th
+                                        style={{ ...thCompact, cursor: "pointer", userSelect: "none" }}
+                                        onClick={() => handleSort("videoAlarm")}
+                                        onKeyDown={(e) => handleSortKeyDown(e, "videoAlarm")}
+                                        role="button"
+                                        tabIndex={0}
+                                    >
+                                        {renderSortLabel("Video", "videoAlarm")}
+                                    </th>
+
+                                    <th
+                                        style={{ ...thCompact, cursor: "pointer", userSelect: "none" }}
+                                        onClick={() => handleSort("tsErrors")}
+                                        onKeyDown={(e) => handleSortKeyDown(e, "tsErrors")}
+                                        role="button"
+                                        tabIndex={0}
+                                    >
+                                        {renderSortLabel("TS Err", "tsErrors")}
+                                    </th>
                                 </tr>
                             </thead>
+
                             <tbody>
-                                {failingRows.map((r, i) => (
-                                    <tr
-                                        key={`fail-${r.ip}-${i}`}
-                                        className="table-row-hover"
-                                    >
-                                        <td
-                                            style={{
-                                                ...tdCompact,
-                                                width: 36,
-                                                maxWidth: 36,
-                                            }}
-                                        >
-                                            <span
-                                                style={{
-                                                    display: "inline-block",
-                                                    width: 12,
-                                                    height: 12,
-                                                    borderRadius: "50%",
-                                                    backgroundColor:
-                                                        r.faultSeverity ===
-                                                        "WARN"
-                                                            ? "#f59e0b"
-                                                            : "red",
-                                                }}
-                                                title={r.faultCode}
-                                            />
-                                        </td>
-                                        <td style={tdCompact} title={r.name}>
-                                            {r.name}
-                                        </td>
-                                        <td style={{ ...tdCompact }}>
-                                            <a
-                                                href={hostHref(r.ip)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                style={{ whiteSpace: "nowrap" }}
-                                                title={`${TITAN_PROTOCOL}://${r.ip}`}
-                                            >
-                                                {r.ip}
-                                            </a>
-                                        </td>
-                                        <td
-                                            style={tdCompact}
-                                            title={r.faultText}
-                                        >
-                                            <span
-                                                className={
-                                                    r.faultSeverity === "WARN"
-                                                        ? "badge badge-amber"
-                                                        : "badge badge-red"
-                                                }
-                                            >
-                                                {r.faultCode}
-                                            </span>
-                                        </td>
-                                        <td
-                                            style={tdCompact}
-                                            title={r.sourceText}
-                                        >
-                                            {r.sourceText}
-                                        </td>
-                                        <td style={tdCompact}>
-                                            {r.audioAlarm ? (
+                                {failingRows.map((r, i) => {
+                                    const audioFail = r.audioAlarm === true;
+                                    const videoFail =
+                                        r._explicitVideoFail === true || r.videoAlarm === true;
+                                    const stopped = r.state === "Stopped";
+
+                                    const dotColor = stopped || audioFail || videoFail ? "red" : "green";
+
+                                    return (
+                                        <tr key={`fail-${r.ip}-${i}`} className="table-row-hover">
+                                            <td style={{ ...tdCompact, width: 36, maxWidth: 36 }}>
                                                 <span
-                                                    className="badge badge-red"
-                                                    title={`Nivel: ${
-                                                        r.audioLevelDb ?? "N/A"
-                                                    } dB  (umbral ${
-                                                        r.audioThreshold ??
-                                                        "N/A"
-                                                    } dB)`}
+                                                    style={{
+                                                        display: "inline-block",
+                                                        width: 12,
+                                                        height: 12,
+                                                        borderRadius: "50%",
+                                                        backgroundColor: dotColor,
+                                                    }}
+                                                    title="fail"
+                                                />
+                                            </td>
+
+                                            <td style={tdCompact} title={r.name}>
+                                                {r.name}
+                                            </td>
+
+                                            <td style={{ ...tdCompact }}>
+                                                <a
+                                                    href={hostHref(r.ip)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{ whiteSpace: "nowrap" }}
+                                                    title={`${TITAN_PROTOCOL}://${r.ip}`}
                                                 >
-                                                    Alarma
-                                                </span>
-                                            ) : (
-                                                <span
-                                                    className="badge badge-green"
-                                                    title={`Nivel: ${
-                                                        r.audioLevelDb ?? "N/A"
-                                                    } dB`}
-                                                >
-                                                    OK
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td style={tdCompact}>
-                                            {r._explicitVideoFail ||
-                                            (r._patternOrStill &&
-                                                treatPatternAsFail) ? (
-                                                <span className="badge badge-red">
-                                                    {r._explicitVideoFail
-                                                        ? "Alarma"
-                                                        : "Pattern/Still"}
-                                                </span>
-                                            ) : (
-                                                <span className="badge badge-green">
-                                                    OK
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td
-                                            style={{
-                                                ...tdCompact,
-                                                textAlign: "left",
-                                            }}
-                                            title={
-                                                r.worstPid
-                                                    ? `worstPid ${r.worstPid.id}:${r.worstPid.errors} • PAT=${r.patMissing} PMT=${r.pmtMissing}`
-                                                    : `PAT=${r.patMissing} PMT=${r.pmtMissing}`
-                                            }
-                                        >
-                                            {r.tsErrors ?? 0}
-                                        </td>
-                                    </tr>
-                                ))}
+                                                    {r.ip}
+                                                </a>
+                                            </td>
+
+                                            <td style={tdCompact} title={r.sourceText}>
+                                                {r.sourceText}
+                                            </td>
+
+                                            <td style={tdCompact}>
+                                                {audioFail ? (
+                                                    <span
+                                                        className="badge badge-red"
+                                                        title={`Alarma audio • Nivel: ${
+                                                            r.audioLevelDb ?? "N/A"
+                                                        } dB (umbral ${r.audioThreshold ?? "N/A"} dB)`}
+                                                    >
+                                                        Alarma
+                                                    </span>
+                                                ) : (
+                                                    <span
+                                                        className="badge badge-green"
+                                                        title={`Audio OK • Nivel: ${r.audioLevelDb ?? "N/A"} dB`}
+                                                    >
+                                                        OK
+                                                    </span>
+                                                )}
+                                            </td>
+
+                                            <td style={tdCompact}>
+                                                {videoFail ? (
+                                                    <span className="badge badge-red" title="Alarma video">
+                                                        Alarma
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge badge-green" title="Video OK">
+                                                        OK
+                                                    </span>
+                                                )}
+                                            </td>
+
+                                            <td style={{ ...tdCompact, textAlign: "left" }}>
+                                                {r.tsErrors ?? 0}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -1798,92 +1517,43 @@ export default function ServicesMultiHost() {
                     >
                         <tr>
                             <th
-                                style={{
-                                    ...th,
-                                    cursor: "pointer",
-                                    userSelect: "none",
-                                }}
+                                style={{ ...th, cursor: "pointer", userSelect: "none" }}
                                 onClick={() => handleSort("host")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "host")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "host")}
                                 role="button"
                                 tabIndex={0}
                             >
                                 {renderSortLabel("Host", "host")}
                             </th>
+
                             <th
-                                style={{
-                                    ...th,
-                                    cursor: "pointer",
-                                    userSelect: "none",
-                                }}
+                                style={{ ...th, cursor: "pointer", userSelect: "none" }}
                                 onClick={() => handleSort("ip")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "ip")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "ip")}
                                 role="button"
                                 tabIndex={0}
                             >
                                 {renderSortLabel("IP", "ip")}
                             </th>
+
                             <th
-                                style={{
-                                    ...th,
-                                    cursor: "pointer",
-                                    userSelect: "none",
-                                }}
+                                style={{ ...th, cursor: "pointer", userSelect: "none" }}
                                 onClick={() => handleSort("name")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "name")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "name")}
                                 role="button"
                                 tabIndex={0}
                             >
                                 {renderSortLabel("Name", "name")}
                             </th>
 
-                            {/* Falla (diagnóstico único) */}
-                            <th
-                                style={{
-                                    ...th,
-                                    width: COL_WIDTHS.falla,
-                                    maxWidth: COL_WIDTHS.falla,
-                                    cursor: "pointer",
-                                    userSelect: "none",
-                                }}
-                                onClick={() => handleSort("fault")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "fault")
-                                }
-                                role="button"
-                                tabIndex={0}
-                            >
-                                {renderSortLabel("Falla", "fault")}
-                            </th>
-
                             {/* Inputs IP */}
-                            <th
-                                style={{
-                                    ...th,
-                                    width: "1%",
-                                    whiteSpace: "nowrap",
-                                }}
-                            >
-                                Inputs IP
-                            </th>
+                            <th style={{ ...th, width: "1%", whiteSpace: "nowrap" }}>Inputs IP</th>
 
                             {/* Multicast salida */}
                             <th
-                                style={{
-                                    ...th,
-                                    cursor: "pointer",
-                                    userSelect: "none",
-                                }}
+                                style={{ ...th, cursor: "pointer", userSelect: "none" }}
                                 onClick={() => handleSort("outputs")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "outputs")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "outputs")}
                                 role="button"
                                 tabIndex={0}
                             >
@@ -1899,14 +1569,13 @@ export default function ServicesMultiHost() {
                                     userSelect: "none",
                                 }}
                                 onClick={() => handleSort("audioAlarm")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "audioAlarm")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "audioAlarm")}
                                 role="button"
                                 tabIndex={0}
                             >
                                 {renderSortLabel("Audio", "audioAlarm")}
                             </th>
+
                             <th
                                 style={{
                                     ...th,
@@ -1916,14 +1585,13 @@ export default function ServicesMultiHost() {
                                     userSelect: "none",
                                 }}
                                 onClick={() => handleSort("videoAlarm")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "videoAlarm")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "videoAlarm")}
                                 role="button"
                                 tabIndex={0}
                             >
                                 {renderSortLabel("Video", "videoAlarm")}
                             </th>
+
                             <th
                                 style={{
                                     ...th,
@@ -1933,14 +1601,13 @@ export default function ServicesMultiHost() {
                                     userSelect: "none",
                                 }}
                                 onClick={() => handleSort("state")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "state")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "state")}
                                 role="button"
                                 tabIndex={0}
                             >
                                 {renderSortLabel("Estado", "state")}
                             </th>
+
                             <th
                                 style={{
                                     ...th,
@@ -1950,9 +1617,7 @@ export default function ServicesMultiHost() {
                                     userSelect: "none",
                                 }}
                                 onClick={() => handleSort("tsErrors")}
-                                onKeyDown={(event) =>
-                                    handleSortKeyDown(event, "tsErrors")
-                                }
+                                onKeyDown={(event) => handleSortKeyDown(event, "tsErrors")}
                                 role="button"
                                 tabIndex={0}
                             >
@@ -1960,11 +1625,12 @@ export default function ServicesMultiHost() {
                             </th>
                         </tr>
                     </thead>
+
                     <tbody>
                         {filtered.length === 0 ? (
                             <tr>
                                 <td
-                                    colSpan={10}
+                                    colSpan={9}
                                     style={{
                                         padding: 12,
                                         textAlign: "center",
@@ -1977,28 +1643,25 @@ export default function ServicesMultiHost() {
                                             Cargando señales…
                                         </span>
                                     ) : (
-                                        <span className="sin-datos">
-                                            Sin datos para mostrar
-                                        </span>
+                                        <span className="sin-datos">Sin datos para mostrar</span>
                                     )}
                                 </td>
                             </tr>
                         ) : (
                             filtered.map((r, idx) => {
-                                const stateText =
-                                    r.state === "Stopped"
-                                        ? "Stopped (fail)"
-                                        : r.state;
+                                const stateText = r.state === "Stopped" ? "Stopped (fail)" : r.state;
 
-                                const isStateFail =
-                                    r.faultSeverity && r.faultSeverity !== "OK";
+                                const audioFail = r.audioAlarm === true;
+                                const videoFail =
+                                    r._explicitVideoFail === true || r.videoAlarm === true;
+                                const stopped = r.state === "Stopped";
+
+                                const isStateFail = audioFail || videoFail || stopped;
 
                                 return (
-                                    <tr
-                                        key={`${r.ip}-${idx}`}
-                                        className="table-row-hover"
-                                    >
+                                    <tr key={`${r.ip}-${idx}`} className="table-row-hover">
                                         <td style={td}>{r.host}</td>
+
                                         <td style={td}>
                                             <a
                                                 href={hostHref(r.ip)}
@@ -2010,34 +1673,8 @@ export default function ServicesMultiHost() {
                                                 {r.ip}
                                             </a>
                                         </td>
-                                        <td style={td}>{r.name}</td>
 
-                                        {/* FALLA */}
-                                        <td
-                                            style={{
-                                                ...td,
-                                                width: COL_WIDTHS.falla,
-                                                maxWidth: COL_WIDTHS.falla,
-                                            }}
-                                            title={r.faultText}
-                                        >
-                                            {r.faultSeverity === "OK" ? (
-                                                <span className="badge badge-green">
-                                                    OK
-                                                </span>
-                                            ) : r.faultSeverity === "WARN" ? (
-                                                <span className="badge badge-amber">
-                                                    {r.faultCode}
-                                                </span>
-                                            ) : (
-                                                <span className="badge badge-red">
-                                                    {r.faultCode}
-                                                </span>
-                                            )}
-                                            <span style={{ marginLeft: 8 }}>
-                                                {r.faultText}
-                                            </span>
-                                        </td>
+                                        <td style={td}>{r.name}</td>
 
                                         {/* Inputs IP ajustados al contenido */}
                                         <td
@@ -2049,8 +1686,7 @@ export default function ServicesMultiHost() {
                                                 textAlign: "left",
                                             }}
                                         >
-                                            {Array.isArray(r.ipInputs) &&
-                                            r.ipInputs.length > 0 ? (
+                                            {Array.isArray(r.ipInputs) && r.ipInputs.length > 0 ? (
                                                 <div
                                                     style={{
                                                         display: "inline-flex",
@@ -2060,85 +1696,59 @@ export default function ServicesMultiHost() {
                                                         textAlign: "left",
                                                     }}
                                                 >
-                                                    {r.ipInputs.map(
-                                                        (ii, iiIdx) => (
-                                                            <div
-                                                                key={iiIdx}
+                                                    {r.ipInputs.map((ii, iiIdx) => (
+                                                        <div
+                                                            key={iiIdx}
+                                                            style={{
+                                                                display: "inline-flex",
+                                                                alignItems: "center",
+                                                                gap: 6,
+                                                                padding: "3px 4px",
+                                                                borderRadius: 4,
+                                                                backgroundColor: "#ffffff",
+                                                                width: "max-content",
+                                                                maxWidth: "300px",
+                                                                textAlign: "left",
+                                                            }}
+                                                            title={
+                                                                ii.source
+                                                                    ? `${ii.url} • Source: ${ii.source}`
+                                                                    : ii.url || "(sin Url)"
+                                                            }
+                                                        >
+                                                            <span
                                                                 style={{
-                                                                    display:
-                                                                        "inline-flex",
-                                                                    alignItems:
-                                                                        "center",
-                                                                    gap: 6,
-                                                                    padding:
-                                                                        "3px 4px",
-                                                                    borderRadius: 4,
-                                                                    backgroundColor:
-                                                                        "#ffffff",
-                                                                    width: "max-content",
-                                                                    maxWidth:
-                                                                        "300px",
-                                                                    textAlign:
-                                                                        "left",
+                                                                    display: "inline-block",
+                                                                    width: 10,
+                                                                    height: 10,
+                                                                    borderRadius: "50%",
+                                                                    flex: "0 0 auto",
+                                                                    backgroundColor: ii.isActive
+                                                                        ? "green"
+                                                                        : "red",
                                                                 }}
-                                                                title={
-                                                                    ii.source
-                                                                        ? `${ii.url} • Source: ${ii.source}`
-                                                                        : ii.url ||
-                                                                          "(sin Url)"
-                                                                }
+                                                            />
+                                                            <span
+                                                                style={{
+                                                                    flex: "1 1 auto",
+                                                                    fontWeight: ii.isActive
+                                                                        ? "bold"
+                                                                        : "normal",
+                                                                    color: ii.isActive ? "green" : "#111827",
+                                                                    overflow: "hidden",
+                                                                    textOverflow: "ellipsis",
+                                                                    whiteSpace: "nowrap",
+                                                                    maxWidth: "260px",
+                                                                    textAlign: "left",
+                                                                }}
                                                             >
-                                                                <span
-                                                                    style={{
-                                                                        display:
-                                                                            "inline-block",
-                                                                        width: 10,
-                                                                        height: 10,
-                                                                        borderRadius:
-                                                                            "50%",
-                                                                        flex: "0 0 auto",
-                                                                        backgroundColor:
-                                                                            ii.isActive
-                                                                                ? "green"
-                                                                                : "red",
-                                                                    }}
-                                                                />
-                                                                <span
-                                                                    style={{
-                                                                        flex: "1 1 auto",
-                                                                        fontWeight:
-                                                                            ii.isActive
-                                                                                ? "bold"
-                                                                                : "normal",
-                                                                        color: ii.isActive
-                                                                            ? "green"
-                                                                            : "#111827",
-                                                                        overflow:
-                                                                            "hidden",
-                                                                        textOverflow:
-                                                                            "ellipsis",
-                                                                        whiteSpace:
-                                                                            "nowrap",
-                                                                        maxWidth:
-                                                                            "260px",
-                                                                        textAlign:
-                                                                            "left",
-                                                                    }}
-                                                                >
-                                                                    {ii.url ||
-                                                                        "(sin Url)"}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    )}
+                                                                {ii.url || "(sin Url)"}
+                                                            </span>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             ) : (
-                                                <span
-                                                    style={{
-                                                        color: "#6b7280",
-                                                        fontStyle: "italic",
-                                                    }}
-                                                >
+                                                <span style={{ color: "#6b7280", fontStyle: "italic" }}>
                                                     sin IPInputList
                                                 </span>
                                             )}
@@ -2172,28 +1782,17 @@ export default function ServicesMultiHost() {
                                                 whiteSpace: "nowrap",
                                             }}
                                             title={
-                                                r.audioAlarm
+                                                audioFail
                                                     ? `Alarma audio • Nivel: ${
-                                                          r.audioLevelDb ??
-                                                          "N/A"
-                                                      } dB • Umbral ${
-                                                          r.audioThreshold ??
-                                                          "N/A"
-                                                      } dB`
-                                                    : `Audio OK • Nivel: ${
-                                                          r.audioLevelDb ??
-                                                          "N/A"
-                                                      } dB`
+                                                          r.audioLevelDb ?? "N/A"
+                                                      } dB • Umbral ${r.audioThreshold ?? "N/A"} dB`
+                                                    : `Audio OK • Nivel: ${r.audioLevelDb ?? "N/A"} dB`
                                             }
                                         >
-                                            {r.audioAlarm ? (
-                                                <span className="badge badge-red">
-                                                    Alarma
-                                                </span>
+                                            {audioFail ? (
+                                                <span className="badge badge-red">Alarma</span>
                                             ) : (
-                                                <span className="badge badge-green">
-                                                    OK
-                                                </span>
+                                                <span className="badge badge-green">OK</span>
                                             )}
                                         </td>
 
@@ -2205,28 +1804,12 @@ export default function ServicesMultiHost() {
                                                 maxWidth: COL_WIDTHS.alarma,
                                                 whiteSpace: "nowrap",
                                             }}
-                                            title={
-                                                r._explicitVideoFail
-                                                    ? "Alarma video"
-                                                    : r._patternOrStill &&
-                                                      treatPatternAsFail
-                                                    ? "Pattern/Still (considerado falla)"
-                                                    : "Video OK"
-                                            }
+                                            title={videoFail ? "Alarma video" : "Video OK"}
                                         >
-                                            {r._explicitVideoFail ? (
-                                                <span className="badge badge-red">
-                                                    Alarma
-                                                </span>
-                                            ) : r._patternOrStill &&
-                                              treatPatternAsFail ? (
-                                                <span className="badge badge-amber">
-                                                    Pattern/Still
-                                                </span>
+                                            {videoFail ? (
+                                                <span className="badge badge-red">Alarma</span>
                                             ) : (
-                                                <span className="badge badge-green">
-                                                    OK
-                                                </span>
+                                                <span className="badge badge-green">OK</span>
                                             )}
                                         </td>
 
@@ -2255,20 +1838,13 @@ export default function ServicesMultiHost() {
                                                         height: 12,
                                                         borderRadius: "50%",
                                                         flex: "0 0 auto",
-                                                        backgroundColor:
-                                                            isStateFail
-                                                                ? r.faultSeverity ===
-                                                                  "WARN"
-                                                                    ? "#f59e0b"
-                                                                    : "red"
-                                                                : "green",
+                                                        backgroundColor: isStateFail ? "red" : "green",
                                                     }}
                                                 />
                                                 <span
                                                     style={{
                                                         overflow: "hidden",
-                                                        textOverflow:
-                                                            "ellipsis",
+                                                        textOverflow: "ellipsis",
                                                         whiteSpace: "nowrap",
                                                         minWidth: 0,
                                                         flex: "1 1 auto",
@@ -2286,11 +1862,7 @@ export default function ServicesMultiHost() {
                                                 textAlign: "left",
                                                 whiteSpace: "nowrap",
                                             }}
-                                            title={
-                                                r.worstPid
-                                                    ? `Suma PID/CC: ${r.tsErrors} • worstPid ${r.worstPid.id}:${r.worstPid.errors} • PAT=${r.patMissing} PMT=${r.pmtMissing}`
-                                                    : `Suma PID/CC: ${r.tsErrors} • PAT=${r.patMissing} PMT=${r.pmtMissing}`
-                                            }
+                                            title="Suma de errores de PID / CC"
                                         >
                                             {r.tsErrors ?? 0}
                                         </td>
