@@ -273,7 +273,7 @@ class Api {
 
         return this._axios.put(`/contact/${id}`, payload).then((r) => r);
     }
-    getIdContact() {
+    getIdContact(id) {
         return this._axios.get(`/contact/${id}`).then((r) => r);
     }
 
