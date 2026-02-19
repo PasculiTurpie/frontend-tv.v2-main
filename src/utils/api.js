@@ -262,7 +262,7 @@ class Api {
         return this._axios.post("/contacts", payload).then((r) => r);
     }
     deleteContact(id) {
-        return this._axios.post(`/contacts/${id}`).then((r) => r);
+        return this._axios.delete(`/contacts/${id}`).then((r) => r);
     }
     updateContact(id, values) {
         const payload = {
