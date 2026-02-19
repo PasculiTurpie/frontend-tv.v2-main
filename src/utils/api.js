@@ -271,10 +271,10 @@ class Api {
             telefono: values.telefono ? values.telefono.trim() : "",
         };
 
-        return this._axios.put(`/contact/${id}`, payload).then((r) => r);
+        return this._axios.put(`/contacts/${id}`, payload).then((r) => r);
     }
     getIdContact(id) {
-        return this._axios.get(`/contact/${id}`).then((r) => r);
+        return this._axios.get(`/contacts/${id}`).then((r) => r);
     }
 
     getTipoTech() {
