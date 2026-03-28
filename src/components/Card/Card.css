@@ -154,7 +154,7 @@
     place-items: center;
     background :
         radial-gradient(40% 50% at 50% 10%, rgba(55, 93, 157, .06) 0%, rgba(55, 93, 157, 0) 100%),
-        #e5e5e5;
+        #fafbfb;
     position: relative;
 }
 
