@@ -12,7 +12,10 @@ const ChannelList = () => {
     const [modalOpen, setModalOpen] = useState(false);
     const [itemId, setItemId] = useState("");
 
-    // --- Paginación (cliente) ---
+    // Buscador
+    const [searchTerm, setSearchTerm] = useState("");
+
+    // Paginación (cliente)
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
 
@@ -43,8 +46,32 @@ const ChannelList = () => {
         refreshList();
     }, [refreshList]);
 
+    // Volver a la primera página al buscar
+    useEffect(() => {
+        setPage(1);
+    }, [searchTerm]);
+
+    // Filtrar por nombre o número
+    const filteredChannels = useMemo(() => {
+        const term = searchTerm.trim().toLowerCase();
+
+        if (!term) return channels;
+
+        return channels.filter((channel) => {
+            const name = (channel.nameChannel || "").toLowerCase();
+            const numberNorth = String(channel.numberChannelCn || "").toLowerCase();
+            const numberSouth = String(channel.numberChannelSur || "").toLowerCase();
+
+            return (
+                name.includes(term) ||
+                numberNorth.includes(term) ||
+                numberSouth.includes(term)
+            );
+        });
+    }, [channels, searchTerm]);
+
     // Datos paginados
-    const total = channels.length;
+    const total = filteredChannels.length;
     const totalPages = Math.max(Math.ceil(total / pageSize) || 1, 1);
 
     // Mantener page en rango si cambia lista o tamaño
@@ -54,8 +81,8 @@ const ChannelList = () => {
 
     const pageItems = useMemo(() => {
         const start = (page - 1) * pageSize;
-        return channels.slice(start, start + pageSize);
-    }, [channels, page, pageSize]);
+        return filteredChannels.slice(start, start + pageSize);
+    }, [filteredChannels, page, pageSize]);
 
     const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
     const rangeEnd = Math.min(page * pageSize, total);
@@ -76,7 +103,6 @@ const ChannelList = () => {
                 await api.deleteSignal(id);
                 await refreshList();
 
-                // Si la página queda vacía tras eliminar, retrocede una
                 setTimeout(() => {
                     const newTotal = Math.max(total - 1, 0);
                     const newTotalPages = Math.max(Math.ceil(newTotal / pageSize) || 1, 1);
@@ -125,10 +151,11 @@ const ChannelList = () => {
         setPage(p);
     };
 
-    // Paginador con elipsis (máx 7 botones)
+    // Paginador con elipsis
     const renderPager = () => {
         const maxButtons = 7;
         const pages = [];
+
         const add = (n) =>
             pages.push(
                 <button
@@ -173,7 +200,7 @@ const ChannelList = () => {
                     </ol>
                 </nav>
 
-                {/* Barra superior: total, rango, page size */}
+                {/* Barra superior */}
                 <div
                     style={{
                         display: "flex",
@@ -193,7 +220,24 @@ const ChannelList = () => {
                         )}
                     </p>
 
-                    <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    <div
+                        style={{
+                            marginLeft: "auto",
+                            display: "flex",
+                            gap: 8,
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                        }}
+                    >
+                        <input
+                            type="text"
+                            className="form__input"
+                            placeholder="Buscar por nombre o número..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            style={{ minWidth: 260 }}
+                        />
+
                         <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             Tamaño de página:
                             <select
